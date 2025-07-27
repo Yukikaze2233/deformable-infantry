@@ -2,7 +2,7 @@
 
 #include <rclcpp/node.hpp>
 #include <rmcs_executor/component.hpp>
-#include <serial_interface.hpp>
+#include <rmcs_msgs/serial_interface.hpp>
 #include <rmcs_utility/crc/dji_crc.hpp>
 
 #include "referee/command/field.hpp"

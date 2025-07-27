@@ -6,7 +6,7 @@
 #include <rmcs_utility/crc/dji_crc.hpp>
 #include <rmcs_utility/package_receive.hpp>
 #include <rmcs_utility/tick_timer.hpp>
-#include <serial_interface.hpp>
+#include <rmcs_msgs/serial_interface.hpp>
 
 #include "referee/frame.hpp"
 #include "referee/status/field.hpp"

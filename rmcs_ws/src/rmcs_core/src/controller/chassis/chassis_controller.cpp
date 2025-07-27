@@ -6,7 +6,7 @@
 #include <rmcs_msgs/keyboard.hpp>
 #include <rmcs_msgs/mouse.hpp>
 #include <rmcs_msgs/switch.hpp>
-#include <shoot_mode.hpp>
+#include <rmcs_msgs/shoot_mode.hpp>
 
 #include "controller/pid/pid_calculator.hpp"
 

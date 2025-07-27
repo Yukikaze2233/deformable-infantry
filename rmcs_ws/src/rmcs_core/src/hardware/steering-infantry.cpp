@@ -12,7 +12,7 @@
 #include <rmcs_description/tf_description.hpp>
 
 #include <rmcs_executor/component.hpp>
-#include <serial_interface.hpp>
+#include <rmcs_msgs/serial_interface.hpp>
 #include <std_msgs/msg/int32.hpp>
 namespace rmcs_core::hardware {
 
