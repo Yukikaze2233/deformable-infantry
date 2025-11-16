@@ -1,7 +1,5 @@
 #include <rclcpp/node.hpp>
 #include <rmcs_executor/component.hpp>
-#include <eigen3/Eigen/Dense>
-#include "fstream"
 namespace rmcs_core::controller::gimbal {
 class GimbalFeedforward final : 
     public rmcs_executor::Component,
@@ -11,53 +9,68 @@ public:
     GimbalFeedforward() : rclcpp::Node(get_component_name(), 
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
     {
-        register_input(get_parameter("control_Object").as_string(), control_Object);
+        register_input(get_parameter("control_Object").as_string(), control_object_);
         register_output(get_parameter("feedforward").as_string(), feed_forward);
         Kv = get_parameter_or("Kv",0.2148);
         Ka = get_parameter_or("Ka",0.3823);
-
         firc = get_parameter_or("firc",7.2);
     }
 
     void update() override
     {
-        *feed_forward = calculate_feedforward_();
+        const double feedforward = calculate_feedforward_();
+        *feed_forward = feedforward + function_compensation(feedforward);
     }
 
 private:
     double calculate_feedforward_(){
+        const double current_x = *control_object_;
+
         if(!calculate_initialized_){
-            previous_dx = 0;
-            previous_x = 0;
+            previous_x_ = 0;
+            previous_dx_ = 0;
             calculate_initialized_ = true;
         }
-        x = *control_Object;
-        dx = (x - previous_x)/dt;
-        ddx = (dx - previous_dx)/dt;
+        const double dx = (current_x - previous_x_) / dt_;
+        const double ddx = (dx - previous_dx_) / dt_;
+        current_dx = dx;
+        previous_dx_ = dx;
+        previous_x_ = current_x;
 
-        previous_dx = dx;
-        previous_x = x;
+        return (Kv * dx) + (Ka * ddx) ; 
+    }
 
-        return (Kv * dx) + (Ka * ddx) + firc; 
-    }    
+    double function_compensation(double feedforward) const{
+        if (std::abs(current_dx) > 0.2 ){
+            if (current_dx < 0){
+                return -firc;
+            } else {
+                return firc;
+            }
+        } else {
+            if(feedforward > 0.1){
+                return firc;
+            } else if(feedforward < -0.1){
+                return -firc;
+            } else {
+                return 0.0;
+            }
+        }
+    }   
 
-    std::string filename_;
-    InputInterface<double> control_Object;
-    OutputInterface<double> feedforward;
 
+    InputInterface<double> control_object_;
 
-    double dt =0.001;
-    double x = 0;
-    double dx = 0;
-    double ddx = 0;
-    double previous_dx;
-    double previous_x;
+    OutputInterface<double> feed_forward;
+
+    double dt_ =0.001;
+    double current_dx;
+    double previous_x_;
+    double previous_dx_;
     double firc;
     double Kv;
     double Ka;
     bool calculate_initialized_ = false;
-    OutputInterface<double> feed_forward;
-    std::ofstream csv_file_;
 }; 
 
 }
