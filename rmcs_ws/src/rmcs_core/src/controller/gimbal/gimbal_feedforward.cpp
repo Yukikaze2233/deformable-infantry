@@ -11,34 +11,52 @@ public:
     GimbalFeedforward() : rclcpp::Node(get_component_name(), 
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
     {
-        
-        register_output(get_parameter("feedforward").as_string(), feedforward);
-
-
         register_input(get_parameter("control_Object").as_string(), control_Object);
+        register_output(get_parameter("feedforward").as_string(), feed_forward);
+        Kv = get_parameter_or("Kv",0.2148);
+        Ka = get_parameter_or("Ka",0.3823);
 
-        firc = get_parameter_or("firc",0.0);
+        firc = get_parameter_or("firc",7.2);
     }
 
     void update() override
     {
-        const double dt = 0.001;
+        *feed_forward = calculate_feedforward_();
     }
 
-private:    
+private:
+    double calculate_feedforward_(){
+        if(!calculate_initialized_){
+            previous_dx = 0;
+            previous_x = 0;
+            calculate_initialized_ = true;
+        }
+        x = *control_Object;
+        dx = (x - previous_x)/dt;
+        ddx = (dx - previous_dx)/dt;
+
+        previous_dx = dx;
+        previous_x = x;
+
+        return (Kv * dx) + (Ka * ddx) + firc; 
+    }    
 
     std::string filename_;
     InputInterface<double> control_Object;
-    InputInterface<double> transfer_function;
-     
     OutputInterface<double> feedforward;
 
 
-    Eigen::Matrix<double,1,3> transfer_function_;
-    Eigen::Matrix<double,3,1> control_Object_;
+    double dt =0.001;
+    double x = 0;
+    double dx = 0;
+    double ddx = 0;
+    double previous_dx;
+    double previous_x;
     double firc;
-    double gain1;
-    double gain2;
+    double Kv;
+    double Ka;
+    bool calculate_initialized_ = false;
+    OutputInterface<double> feed_forward;
     std::ofstream csv_file_;
 }; 
 
