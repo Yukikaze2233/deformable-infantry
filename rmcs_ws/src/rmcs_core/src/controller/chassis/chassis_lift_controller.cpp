@@ -77,7 +77,7 @@ public:
             double right_front_target_torque = std::clamp(target_torque + right_front_compensation, -max_torque_, max_torque_);
             double right_back_target_torque = std::clamp(target_torque + right_back_compensation, -max_torque_, max_torque_);
             
-            *left_front_wheel_torque_ = left_front_target_torque;
+            *left_front_wheel_torque_ = target_torque/*left_front_target_torque*/;
             *left_back_wheel_torque_ = left_back_target_torque;
             *right_front_wheel_torque_ = right_front_target_torque;
             *right_back_wheel_torque_ = right_back_target_torque;
