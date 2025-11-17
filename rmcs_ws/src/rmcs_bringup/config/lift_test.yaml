@@ -1,0 +1,6 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs_core::hardware::TestInfantry -> lift_test_infantry
+      - rmcs_core::controller::chassis::ChassisLiftController -> lift_test
