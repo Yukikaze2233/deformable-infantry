@@ -9,11 +9,11 @@ public:
     GimbalFeedforward() : rclcpp::Node(get_component_name(), 
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
     {
-        register_input(get_parameter("control_Object").as_string(), control_object_);
-        register_output(get_parameter("feedforward").as_string(), feed_forward);
-        Kv = get_parameter_or("Kv",0.2148);
-        Ka = get_parameter_or("Ka",0.3823);
-        firc = get_parameter_or("firc",7.2);
+        register_input(get_parameter("measurement").as_string(), control_object_);
+        register_output(get_parameter("control").as_string(), feed_forward);
+        Kv = get_parameter("kv").as_double();
+        Ka = get_parameter("ka").as_double();
+        firc = get_parameter("firc").as_double();
     }
 
     void update() override
@@ -37,7 +37,7 @@ private:
         previous_dx_ = dx;
         previous_x_ = current_x;
 
-        return (Kv * dx) + (Ka * ddx) ; 
+        return (Kv * dx) + (Ka * ddx) + current_x; 
     }
 
     double function_compensation(double feedforward) const{
