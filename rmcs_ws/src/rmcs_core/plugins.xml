@@ -17,7 +17,14 @@
   <class type = "rmcs_core::hardware::TunnelInfantry" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
+<<<<<<< HEAD
   <class type="rmcs_core::hardware::DeformableInfantry" base_class_type="rmcs_executor::Component">
+=======
+  <class type = "rmcs_core::hardware::TestInfantry" base_class_type="rmcs_executor::Component">
+    <description>Test plugin.</description>
+  </class>
+  <class type = "rmcs_core::controller::chassis::ChassisLiftController" base_class_type="rmcs_executor::Component">
+>>>>>>> b0012e3 (lift_test_v2)
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::controller::chassis::ChassisController" base_class_type="rmcs_executor::Component">

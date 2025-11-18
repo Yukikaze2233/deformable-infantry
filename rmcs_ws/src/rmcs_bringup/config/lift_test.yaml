@@ -4,3 +4,7 @@ rmcs_executor:
     components:
       - rmcs_core::hardware::TestInfantry -> lift_test_infantry
       - rmcs_core::controller::chassis::ChassisLiftController -> lift_test
+
+lift_test_infantry:
+  ros__parameters:
+    usb_pid: -1
