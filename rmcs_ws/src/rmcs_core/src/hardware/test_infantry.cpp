@@ -48,7 +48,15 @@ public:
     }
 
     void command_update() {
-        
+        uint16_t can_commands[4];
+
+        can_commands[0] = chassis_lift_motors_[0].generate_command();
+        can_commands[1] = 0.0/*chassis_lift_motors_[1].generate_command()*/;
+        can_commands[2] = 0.0/*chassis_lift_motors_[2].generate_command()*/;
+        can_commands[3] = 0.0/*chassis_lift_motors_[3].generate_command()*/;
+
+        transmit_buffer_.add_can2_transmission(0x200, std::bit_cast<uint64_t>(can_commands));
+
         transmit_buffer_.trigger_transmission();
     }
 private:
@@ -58,7 +66,7 @@ private:
             motor.update_status();
     }
 protected:
-    void can1_receive_callback(
+    void can2_receive_callback(
         uint32_t can_id, uint64_t can_data, bool is_extended_can_id, bool is_remote_transmission,
         uint8_t can_data_length) override {
         if (is_extended_can_id || is_remote_transmission || can_data_length < 8) [[unlikely]]

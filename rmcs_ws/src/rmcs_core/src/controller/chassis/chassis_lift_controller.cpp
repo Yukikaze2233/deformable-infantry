@@ -29,13 +29,10 @@ public:
         register_input("/remote/switch/right", switch_right_);
         register_input("/remote/switch/left", switch_left_);
         
-        register_input("/chassis/lift/left_front_wheel", left_front_wheel_);
         register_input("/chassis/lift/left_front_wheel/angle", left_front_wheel_angle_);
-        register_input("/chassis/lift/left_back_wheel", left_back_wheel_);
+        register_input("/chassis/lift/left_front_wheel/encoder_angle", left_front_wheel_encoder_angle_);
         register_input("/chassis/lift/left_back_wheel/angle", left_back_wheel_angle_);
-        register_input("/chassis/lift/right_front_wheel", right_front_wheel_);
         register_input("/chassis/lift/right_front_wheel/angle", right_front_wheel_angle_);
-        register_input("/chassis/lift/right_back_wheel", right_back_wheel_);
         register_input("/chassis/lift/right_back_wheel/angle", right_back_wheel_angle_);
 
         register_output("/chassis/lift/left_front_wheel/control_torque", left_front_wheel_torque_, nan_);
@@ -57,36 +54,41 @@ public:
         auto right_back_wheel_angle = *right_back_wheel_angle_;
 
         
-        if (switch_right_state == rmcs_msgs::Switch::DOWN && 
-            switch_left_state == rmcs_msgs::Switch::DOWN) {
-            stop_lift();
-            return;
-        }
-        else if(switch_right_state == rmcs_msgs::Switch::MIDDLE && 
-                switch_left_state == rmcs_msgs::Switch::MIDDLE){
-            double target_torque = joystick_right_state.x() * max_torque_;
+        // if (switch_right_state == rmcs_msgs::Switch::DOWN && 
+        //     switch_left_state == rmcs_msgs::Switch::DOWN) {
+        //     stop_lift();
+        //     return;
+        // }
+        // else if(switch_right_state == rmcs_msgs::Switch::MIDDLE && 
+        //         switch_left_state == rmcs_msgs::Switch::MIDDLE){
+        //     double target_torque = 2.5/*joystick_right_state.x() * max_torque_*/;
 
-            if(std::abs(target_torque) < 1.2){
-                target_torque = 0.0;
-            }
+        //     if(std::abs(target_torque) < 1.2){
+        //         target_torque = 0.0;
+        //     }
 
-            auto [left_front_compensation, left_back_compensation, right_front_compensation, right_back_compensation] = torque_calculator(left_front_wheel_angle, left_back_wheel_angle, right_front_wheel_angle, right_back_wheel_angle);
+        //     auto [left_front_compensation, left_back_compensation, right_front_compensation, right_back_compensation] = torque_calculator(left_front_wheel_angle, left_back_wheel_angle, right_front_wheel_angle, right_back_wheel_angle);
             
-            double left_front_target_torque = std::clamp(target_torque + left_front_compensation, -max_torque_, max_torque_);
-            double left_back_target_torque = std::clamp(target_torque + left_back_compensation, -max_torque_, max_torque_);
-            double right_front_target_torque = std::clamp(target_torque + right_front_compensation, -max_torque_, max_torque_);
-            double right_back_target_torque = std::clamp(target_torque + right_back_compensation, -max_torque_, max_torque_);
+        //     double left_front_target_torque = std::clamp(target_torque + left_front_compensation, -max_torque_, max_torque_);
+        //     double left_back_target_torque = std::clamp(target_torque + left_back_compensation, -max_torque_, max_torque_);
+        //     double right_front_target_torque = std::clamp(target_torque + right_front_compensation, -max_torque_, max_torque_);
+        //     double right_back_target_torque = std::clamp(target_torque + right_back_compensation, -max_torque_, max_torque_);
             
-            *left_front_wheel_torque_ = target_torque/*left_front_target_torque*/;
-            *left_back_wheel_torque_ = left_back_target_torque;
-            *right_front_wheel_torque_ = right_front_target_torque;
-            *right_back_wheel_torque_ = right_back_target_torque;
+        //     *left_front_wheel_torque_ = target_torque/*left_front_target_torque*/;
+        //     *left_back_wheel_torque_ = left_back_target_torque;
+        //     *right_front_wheel_torque_ = right_front_target_torque;
+        //     *right_back_wheel_torque_ = right_back_target_torque;
             
-        }
-        else {
-            stop_lift();
-            return;
-        }
+        // }
+        // else {
+        //     stop_lift();
+        //     return;
+        // }
+         *left_front_wheel_torque_ = -0.7;
+        RCLCPP_INFO(
+            get_logger(), "Max control torque of wheel motor: %f",
+            *left_front_wheel_encoder_angle_);
+         
     }
 private:
 
@@ -117,13 +119,10 @@ private:
     InputInterface<rmcs_msgs::Switch> switch_right_;
     InputInterface<rmcs_msgs::Switch> switch_left_;
 
-    InputInterface<double> left_front_wheel_;
     InputInterface<double> left_front_wheel_angle_;
-    InputInterface<double> left_back_wheel_;
+    InputInterface<double> left_front_wheel_encoder_angle_;
     InputInterface<double> left_back_wheel_angle_;
-    InputInterface<double> right_front_wheel_;
     InputInterface<double> right_front_wheel_angle_;
-    InputInterface<double> right_back_wheel_;
     InputInterface<double> right_back_wheel_angle_;
 
     OutputInterface<double> left_front_wheel_torque_;
