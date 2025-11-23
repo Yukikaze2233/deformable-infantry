@@ -36,9 +36,9 @@ public:
 
         using namespace rmcs_description;
 
-        gimbal_calibrate_subscription_ = create_subscription<std_msgs::msg::Int32>(
-            "/gimbal/calibrate", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
-                gimbal_calibrate_subscription_callback(std::move(msg));
+        chassis_lift_calibrate_subscription_ = create_subscription<std_msgs::msg::Int32>(
+            "/chassis_lift_motor_0/calibrate", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
+                chassis_lift_calibrate_subscription_callback(std::move(msg));
             });
 
     }
@@ -72,7 +72,7 @@ private:
             motor.update_status();
     }
 
-    void gimbal_calibrate_subscription_callback(std_msgs::msg::Int32::UniquePtr) {
+    void chassis_lift_calibrate_subscription_callback(std_msgs::msg::Int32::UniquePtr) {
         RCLCPP_INFO(
             logger_, "[chassis calibration] New motor_0 offset: %d",
             chassis_lift_motors_[0].calibrate_zero_point());
@@ -119,7 +119,7 @@ private:
     };
     std::shared_ptr<InfantryCommand> infantry_command_;
 
-    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr gimbal_calibrate_subscription_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr chassis_lift_calibrate_subscription_;
 
     device::DjiMotor chassis_lift_motors_[4]{
         {*this, *infantry_command_, "/chassis/lift/left_front_wheel"},
