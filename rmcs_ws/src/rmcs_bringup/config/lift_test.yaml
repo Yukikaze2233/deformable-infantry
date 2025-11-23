@@ -8,3 +8,8 @@ rmcs_executor:
 lift_test_infantry:
   ros__parameters:
     usb_pid: -1
+
+lift_test:
+  ros__parameters:
+    min_angle: 0.436332
+    max_angle: 1.308997

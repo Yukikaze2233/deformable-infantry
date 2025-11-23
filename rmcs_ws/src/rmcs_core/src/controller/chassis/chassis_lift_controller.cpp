@@ -23,6 +23,8 @@ public:
             {14.0, 0.001, 0.05},  
             {14.0, 0.001, 0.05}   
         }
+        , min_angle_( get_parameter_or("min_angle", -1.57) )
+        , max_angle_( get_parameter_or("max_angle", 1.57) )
     {        
         register_input("/chassis/lift/target_angle", target_angle_);
         register_input("/chassis/lift/left_front_wheel/encoder_angle", left_front_wheel_angle_);
@@ -49,7 +51,7 @@ public:
         double rf = *right_front_wheel_angle_;
         double rb = *right_back_wheel_angle_;
 
-        target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;  //Soft Limit
+        target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;
 
         auto calc_error = [target](double current) {
             double err = target - current;
@@ -91,10 +93,10 @@ private:
 
     rmcs_core::controller::pid::PidCalculator wheel_pids[4];
 
+    const double min_angle_ ;
+    const double max_angle_ ;
 
-    const double max_torque_ = 6.0;
-    const double max_angle_ = 80.24;
-    const double min_angle_ = 1.00;                    
+    const double max_torque_ = 6.0;                
 };
 
 } // namespace rmcs_core::controller::chassis

@@ -35,6 +35,12 @@ public:
                                 .enable_multi_turn_angle());
 
         using namespace rmcs_description;
+
+        gimbal_calibrate_subscription_ = create_subscription<std_msgs::msg::Int32>(
+            "/gimbal/calibrate", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
+                gimbal_calibrate_subscription_callback(std::move(msg));
+            });
+
     }
 
     ~TestInfantry() override {
@@ -65,6 +71,13 @@ private:
         for (auto& motor : chassis_lift_motors_)
             motor.update_status();
     }
+
+    void gimbal_calibrate_subscription_callback(std_msgs::msg::Int32::UniquePtr) {
+        RCLCPP_INFO(
+            logger_, "[chassis calibration] New motor_0 offset: %d",
+            chassis_lift_motors_[0].calibrate_zero_point());
+    }
+
 protected:
     void can2_receive_callback(
         uint32_t can_id, uint64_t can_data, bool is_extended_can_id, bool is_remote_transmission,
@@ -105,6 +118,9 @@ private:
         TestInfantry& infantry_;
     };
     std::shared_ptr<InfantryCommand> infantry_command_;
+
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr gimbal_calibrate_subscription_;
+
     device::DjiMotor chassis_lift_motors_[4]{
         {*this, *infantry_command_, "/chassis/lift/left_front_wheel"},
         {*this, *infantry_command_, "/chassis/lift/left_back_wheel"},
