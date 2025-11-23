@@ -49,6 +49,8 @@ public:
         double rf = *right_front_wheel_angle_;
         double rb = *right_back_wheel_angle_;
 
+        target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;  //Soft Limit
+
         auto calc_error = [target](double current) {
             double err = target - current;
             return std::atan2(std::sin(err), std::cos(err));  
@@ -90,7 +92,9 @@ private:
     rmcs_core::controller::pid::PidCalculator wheel_pids[4];
 
 
-    const double max_torque_ = 6.0;                    
+    const double max_torque_ = 6.0;
+    const double max_angle_ = 80.24;
+    const double min_angle_ = 1.00;                    
 };
 
 } // namespace rmcs_core::controller::chassis
