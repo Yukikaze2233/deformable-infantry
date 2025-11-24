@@ -11,5 +11,5 @@ lift_test_infantry:
 
 lift_test:
   ros__parameters:
-    min_angle: 0.436332
-    max_angle: 1.308997
+    min_angle: 30.0
+    max_angle: 55.0
