@@ -27,12 +27,13 @@ public:
               create_partner_component<InfantryCommand>(get_component_name() + "_command", *this))
         , transmit_buffer_(*this, 32)
         , event_thread_([this]() { handle_events(); }) {
-
+            
         for (auto& motor : chassis_lift_motors_)
             motor.configure(device::DjiMotor::Config{device::DjiMotor::Type::M3508}
                                 .set_reversed()
                                 .set_reduction_ratio(13.)
                                 .enable_multi_turn_angle());
+        register_output("/chassis/lift/target_angle", target_angle_);
 
         using namespace rmcs_description;
 
@@ -128,6 +129,9 @@ private:
         {*this, *infantry_command_, "/chassis/lift/right_back_wheel"}
     };
     device::Dr16 dr16_{*this};
+
+    OutputInterface<double> target_angle_;
+
     librmcs::client::CBoard::TransmitBuffer transmit_buffer_;
     std::thread event_thread_;
 

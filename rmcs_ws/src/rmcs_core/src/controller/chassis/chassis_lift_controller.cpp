@@ -4,6 +4,7 @@
 #include <rmcs_msgs/switch.hpp>
 #include <eigen3/Eigen/Dense>
 #include <cmath>
+#include <algorithm>
 
 #include "controller/pid/pid_calculator.hpp"
 
@@ -18,10 +19,10 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , wheel_pids{  
-            {14.0, 0.001, 0.05},  
-            {14.0, 0.001, 0.05},  
-            {14.0, 0.001, 0.05},  
-            {14.0, 0.001, 0.05}   
+            {0.03436926, 0.000001, 0.001},  
+            {1.0, 0.001, 0.01},  
+            {1.0, 0.001, 0.01},  
+            {1.0, 0.001, 0.01}   
         }
         , min_angle_( get_parameter_or("min_angle", -1.57) )
         , max_angle_( get_parameter_or("max_angle", 1.57) )
@@ -45,27 +46,36 @@ public:
 
     void update() override {
 
-        double target = *target_angle_;
+        double target =  *target_angle_;
         double lf = *left_front_wheel_angle_;
         double lb = *left_back_wheel_angle_;
         double rf = *right_front_wheel_angle_;
         double rb = *right_back_wheel_angle_;
 
-        target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;
+        target = 35;
 
+
+        target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;
+        
         auto calc_error = [target](double current) {
             double err = target - current;
             return std::atan2(std::sin(err), std::cos(err));  
         };
-        double lf_err = calc_error(lf);
+        // double lf_err = calc_error(lf);
+
+        double lf_err = target - lf;
         double lb_err = calc_error(lb);
         double rf_err = calc_error(rf);
         double rb_err = calc_error(rb);
 
-        *left_front_wheel_torque_ = wheel_pids[0].update(lf_err);
+        *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8);
+
+        // *left_front_wheel_torque_ = 0.5;
         *left_back_wheel_torque_  = wheel_pids[1].update(lb_err);
         *right_front_wheel_torque_ = wheel_pids[2].update(rf_err);
         *right_back_wheel_torque_  = wheel_pids[3].update(rb_err);
+
+        RCLCPP_INFO(get_logger(), "encode:%f", lf);
 
     }
 
