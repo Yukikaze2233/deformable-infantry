@@ -11,7 +11,7 @@ lift_test_infantry:
 
 lift_test:
   ros__parameters:
-    L0: 10
+    L0: 64.1488
     Bx: 9.5
     By: 90
     L: 100

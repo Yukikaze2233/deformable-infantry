@@ -101,7 +101,7 @@ private:
 
     double trapezoidal_calaulator(double alpha) const{
         double term = Bx * cos(alpha) + By * sin(alpha);
-        double s = term + sqrt(term * term - Bx * Bx - By * By + L * L) - L0;
+        double s = term + sqrt(L * L - (By * std::sin(alpha) - By * std::cos(alpha) + 15) * (By * std::sin(alpha) - By * std::cos(alpha) + 15)) - L0;
         return s;
     }
 
