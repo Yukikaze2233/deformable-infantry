@@ -25,10 +25,10 @@ public:
             {1.0, 0.001, 0.01},  
             {1.0, 0.001, 0.01}   
         }
-        , min_angle_( get_parameter_or("min_angle", -1.57) )
-        , max_angle_( get_parameter_or("max_angle", 1.57) )
+        , min_angle_( get_parameter_or("min_angle", 15) )
+        , max_angle_( get_parameter_or("max_angle", 55) )
     {        
-        register_input("/chassis/lift/target_angle", target_angle_);
+        register_input("/chassis/lift/target_angle", target_angle_);/*15-55*/
         register_input("/chassis/lift/left_front_wheel/encoder_angle", left_front_wheel_angle_);
         register_input("/chassis/lift/left_back_wheel/encoder_angle", left_back_wheel_angle_);
         register_input("/chassis/lift/right_front_wheel/encoder_angle", right_front_wheel_angle_);
@@ -106,10 +106,10 @@ private:
     }
 
     void init_calculator(std_msgs::msg::Int32::UniquePtr){
-        lf = trapezoidal_calaulator(*left_front_wheel_angle_);
-        lb = trapezoidal_calaulator(*left_back_wheel_angle_);
-        rf = trapezoidal_calaulator(*right_front_wheel_angle_);
-        rb = trapezoidal_calaulator(*right_back_wheel_angle_);
+        lf = trapezoidal_calaulator(65 - *left_front_wheel_angle_);
+        lb = trapezoidal_calaulator(65 - *left_back_wheel_angle_);
+        rf = trapezoidal_calaulator(65 - *right_front_wheel_angle_);
+        rb = trapezoidal_calaulator(65 - *right_back_wheel_angle_);
         s_lf = lf;
         s_lb = lb;
         s_rf = rf;
