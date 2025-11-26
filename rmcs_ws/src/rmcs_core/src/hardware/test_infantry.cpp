@@ -31,13 +31,11 @@ public:
         for (auto& motor : chassis_lift_motors_)
             motor.configure(device::DjiMotor::Config{device::DjiMotor::Type::M3508}
                                 .set_reversed()
-                                .set_reduction_ratio(13.)
-                                .enable_multi_turn_angle());
-        register_output("/chassis/lift/target_angle", target_angle_);
-
+                                .set_reduction_ratio(13.));
+        
         using namespace rmcs_description;
 
-        chassis_lift_calibrate_subscription_ = create_subscription<std_msgs::msg::Int32>(
+        chassis_calibrate_subscription_ = create_subscription<std_msgs::msg::Int32>(
             "/chassis_lift_motor_0/calibrate", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
                 chassis_lift_calibrate_subscription_callback(std::move(msg));
             });
@@ -73,12 +71,6 @@ private:
             motor.update_status();
     }
 
-    void chassis_lift_calibrate_subscription_callback(std_msgs::msg::Int32::UniquePtr) {
-        RCLCPP_INFO(
-            logger_, "[chassis calibration] New motor_0 offset: %d",
-            chassis_lift_motors_[0].calibrate_zero_point());
-    }
-
 protected:
     void can2_receive_callback(
         uint32_t can_id, uint64_t can_data, bool is_extended_can_id, bool is_remote_transmission,
@@ -105,6 +97,15 @@ protected:
         dr16_.store_status(uart_data, uart_data_length);
     }
 
+    void chassis_lift_calibrate_subscription_callback(std_msgs::msg::Int32::UniquePtr) {
+    for (size_t i = 0; i < std::size(chassis_lift_motors_); ++i) {
+        RCLCPP_INFO(
+            logger_, "[chassis lift calibration] New offset for motor %zu: %d",
+            i, chassis_lift_motors_[i].calibrate_zero_point()
+        );
+    }
+}
+
 
 private:
     rclcpp::Logger logger_;
@@ -118,9 +119,10 @@ private:
 
         TestInfantry& infantry_;
     };
-    std::shared_ptr<InfantryCommand> infantry_command_;
 
-    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr chassis_lift_calibrate_subscription_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr chassis_calibrate_subscription_;
+
+    std::shared_ptr<InfantryCommand> infantry_command_;
 
     device::DjiMotor chassis_lift_motors_[4]{
         {*this, *infantry_command_, "/chassis/lift/left_front_wheel"},
@@ -128,6 +130,8 @@ private:
         {*this, *infantry_command_, "/chassis/lift/right_front_wheel"},
         {*this, *infantry_command_, "/chassis/lift/right_back_wheel"}
     };
+
+
     device::Dr16 dr16_{*this};
 
     OutputInterface<double> target_angle_;
