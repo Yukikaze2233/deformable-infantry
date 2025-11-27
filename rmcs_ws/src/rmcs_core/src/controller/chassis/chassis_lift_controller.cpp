@@ -20,7 +20,7 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , wheel_pids{  
-            {0.03436926, 0.000001, 0.001},  
+            {0.5, 0.001, 0.01},  
             {1.0, 0.001, 0.01},  
             {1.0, 0.001, 0.01},  
             {1.0, 0.001, 0.01}   
@@ -28,7 +28,7 @@ public:
         , min_angle_( get_parameter_or("min_angle", 15) )
         , max_angle_( get_parameter_or("max_angle", 55) )
     {        
-        register_input("/chassis/lift/target_angle", target_angle_);/*15-55*/
+        // register_input("/chassis/lift/target_angle", target_angle_);/*15-55*/
         register_input("/chassis/lift/left_front_wheel/encoder_angle", left_front_wheel_angle_);
         register_input("/chassis/lift/left_back_wheel/encoder_angle", left_back_wheel_angle_);
         register_input("/chassis/lift/right_front_wheel/encoder_angle", right_front_wheel_angle_);
@@ -56,38 +56,35 @@ public:
     }
 
     void update() override {
+        if(test_init = 0){
+            init_calculator();
+            test_init = true;
+        }
 
-        double target = trapezoidal_calaulator(*target_angle_);
-        chassis_lift_controller_ = create_subscription<std_msgs::msg::Int32>(
-        "/chassis/lift/target_angle", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
-            init_calculator(std::move(msg));
-        });
-
+        double target = trapezoidal_calaulator(45/* *target_angle_ */);
+        // chassis_lift_controller_ = create_subscription<std_msgs::msg::Int32>(
+        // "/chassis/lift/target_angle", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
+        //     stop_lift();
+        //     init_calculator(std::move(msg));
+        // });
 
         target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;
-        
-        auto calc_error = [target](double current) {
-            double err = target - current;
-            return std::atan2(std::sin(err), std::cos(err));  
-        };
 
         s_lf = lf + *left_front_wheel_velocity_/(2 * pi) * dt;
         s_lb = lb + *left_back_wheel_velocity_/(2 * pi) * dt;
         s_rf = rf + *right_front_wheel_velocity_/(2 * pi) * dt;
         s_rb = rb + *right_back_wheel_velocity_/(2 * pi) * dt;
 
-        double lf_err = calc_error(s_lf);
-        double lb_err = calc_error(s_lb);
-        double rf_err = calc_error(s_rf);
-        double rb_err = calc_error(s_rb);
+        double lf_err = target - s_lf;
+        double lb_err = target - s_lb;
+        double rf_err = target - s_rf;
+        double rb_err = target - s_rb;
 
         *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8);
-
         // *left_front_wheel_torque_ = 0.5;
         *left_back_wheel_torque_  = wheel_pids[1].update(lb_err);
         *right_front_wheel_torque_ = wheel_pids[2].update(rf_err);
         *right_back_wheel_torque_  = wheel_pids[3].update(rb_err);
-        
     }
 
 private:
@@ -100,12 +97,23 @@ private:
     }
 
     double trapezoidal_calaulator(double alpha) const{
-        double term = Bx * cos(alpha) + By * sin(alpha);
-        double s = term + sqrt(L * L - (By * std::sin(alpha) - By * std::cos(alpha) + 15) * (By * std::sin(alpha) - By * std::cos(alpha) + 15)) - L0;
+        double term = Bx * cos(alpha * 2 * pi / 180) + By * sin(alpha * 2 * pi / 180);
+        double s = term + sqrt(L * L - (By * std::sin(alpha * 2 * pi / 180) - By * std::cos(alpha * 2 * pi / 180) + 15) * (By * std::sin(alpha * 2 * pi / 180) - By * std::cos(alpha * 2 * pi / 180) + 15)) - L0;
         return s;
     }
 
-    void init_calculator(std_msgs::msg::Int32::UniquePtr){
+    // void init_calculator(std_msgs::msg::Int32::UniquePtr){
+    //     lf = trapezoidal_calaulator(65 - *left_front_wheel_angle_);
+    //     lb = trapezoidal_calaulator(65 - *left_back_wheel_angle_);
+    //     rf = trapezoidal_calaulator(65 - *right_front_wheel_angle_);
+    //     rb = trapezoidal_calaulator(65 - *right_back_wheel_angle_);
+    //     s_lf = lf;
+    //     s_lb = lb;
+    //     s_rf = rf;
+    //     s_rb = rb;
+    // }
+
+    void init_calculator(){
         lf = trapezoidal_calaulator(65 - *left_front_wheel_angle_);
         lb = trapezoidal_calaulator(65 - *left_back_wheel_angle_);
         rf = trapezoidal_calaulator(65 - *right_front_wheel_angle_);
@@ -119,7 +127,7 @@ private:
     static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr chassis_lift_controller_;
 
-    InputInterface<double> target_angle_;
+    // InputInterface<double> target_angle_;
     InputInterface<double> left_front_wheel_angle_;
     InputInterface<double> left_back_wheel_angle_;
     InputInterface<double> right_front_wheel_angle_;
@@ -150,6 +158,8 @@ private:
     double L;
     double dt = 0.001;
     double pi = 3.1415926;
+
+    bool test_init = false;
 };
 
 } // namespace rmcs_core::controller::chassis
