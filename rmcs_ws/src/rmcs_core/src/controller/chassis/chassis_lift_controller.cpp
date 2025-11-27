@@ -20,7 +20,7 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , wheel_pids{  
-            {0.5, 0.001, 0.01},  
+            {0.015, 0.000, 0.09},  
             {1.0, 0.001, 0.01},  
             {1.0, 0.001, 0.01},  
             {1.0, 0.001, 0.01}   
@@ -56,35 +56,42 @@ public:
     }
 
     void update() override {
-        if(test_init = 0){
+        if(test_init == false){
             init_calculator();
             test_init = true;
         }
 
-        double target = trapezoidal_calaulator(45/* *target_angle_ */);
+        double target = trapezoidal_calaulator(45.0/* *target_angle_ */);
         // chassis_lift_controller_ = create_subscription<std_msgs::msg::Int32>(
         // "/chassis/lift/target_angle", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
         //     stop_lift();
         //     init_calculator(std::move(msg));
         // });
 
-        target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;
+        // target = (target < min_angle_) ? min_angle_ : (target > max_angle_) ? max_angle_ : target;
 
-        s_lf = lf + *left_front_wheel_velocity_/(2 * pi) * dt;
-        s_lb = lb + *left_back_wheel_velocity_/(2 * pi) * dt;
-        s_rf = rf + *right_front_wheel_velocity_/(2 * pi) * dt;
-        s_rb = rb + *right_back_wheel_velocity_/(2 * pi) * dt;
 
-        double lf_err = target - s_lf;
+        s_lf -= (*left_front_wheel_velocity_/(2 * pi)) * dt * 3591 / 187;
+        s_lb += *left_back_wheel_velocity_/(2 * pi) * dt;
+        s_rf += *right_front_wheel_velocity_/(2 * pi) * dt;
+        s_rb += *right_back_wheel_velocity_/(2 * pi) * dt;
+
+        double lf_err = s_lf - target;
         double lb_err = target - s_lb;
         double rf_err = target - s_rf;
         double rb_err = target - s_rb;
 
-        *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8);
-        // *left_front_wheel_torque_ = 0.5;
+        *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.5,0.5);
+        // *left_front_wheel_torque_ = 0.0;
         *left_back_wheel_torque_  = wheel_pids[1].update(lb_err);
         *right_front_wheel_torque_ = wheel_pids[2].update(rf_err);
         *right_back_wheel_torque_  = wheel_pids[3].update(rb_err);
+
+        // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_%f", *left_front_wheel_torque_);
+        // RCLCPP_INFO(get_logger(), "target%f", target);
+        // RCLCPP_INFO(get_logger(), "lf_err%f", lf_err);
+        RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_%f", *left_front_wheel_velocity_);
+        RCLCPP_INFO(get_logger(), "s_lf:%f", s_lf);
     }
 
 private:
@@ -97,8 +104,8 @@ private:
     }
 
     double trapezoidal_calaulator(double alpha) const{
-        double term = Bx * cos(alpha * 2 * pi / 180) + By * sin(alpha * 2 * pi / 180);
-        double s = term + sqrt(L * L - (By * std::sin(alpha * 2 * pi / 180) - By * std::cos(alpha * 2 * pi / 180) + 15) * (By * std::sin(alpha * 2 * pi / 180) - By * std::cos(alpha * 2 * pi / 180) + 15)) - L0;
+        double term = Bx * cos(alpha * pi / 180) + By * sin(alpha * pi / 180);
+        double s = term + sqrt(L * L - (By * std::sin(alpha * pi / 180) - By * std::cos(alpha * pi / 180) + 15) * (By * std::sin(alpha * pi / 180) - By * std::cos(alpha * pi / 180) + 15)) - L0;
         return s;
     }
 

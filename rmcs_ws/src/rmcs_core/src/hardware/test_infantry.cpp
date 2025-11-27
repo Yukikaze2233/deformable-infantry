@@ -134,7 +134,7 @@ private:
 
     device::Dr16 dr16_{*this};
 
-    OutputInterface<double> target_angle_;
+    // OutputInterface<double> target_angle_;
 
     librmcs::client::CBoard::TransmitBuffer transmit_buffer_;
     std::thread event_thread_;
