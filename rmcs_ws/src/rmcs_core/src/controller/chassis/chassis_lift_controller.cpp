@@ -6,6 +6,7 @@
 #include <cmath>
 #include <algorithm>
 
+#include <rmcs_msgs/switch.hpp>
 #include "controller/pid/pid_calculator.hpp"
 #include "std_msgs/msg/int32.hpp"
 
@@ -20,7 +21,7 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , wheel_pids{  
-            {0.015, 0.000, 0.09},  
+            {0.015, 0.0, 0.09},  
             {1.0, 0.001, 0.01},  
             {1.0, 0.001, 0.01},  
             {1.0, 0.001, 0.01}   
@@ -29,6 +30,10 @@ public:
         , max_angle_( get_parameter_or("max_angle", 55) )
     {        
         // register_input("/chassis/lift/target_angle", target_angle_);/*15-55*/
+        register_input("/remote/joystick/left", remote_left_joystic_);
+        register_input("/remote/joystick/right", remote_right_joystic_);
+        register_input("/remote/switch/left", remote_left_switch_);
+        register_input("/remote/switch/right", remote_right_switch_);
         register_input("/chassis/lift/left_front_wheel/encoder_angle", left_front_wheel_angle_);
         register_input("/chassis/lift/left_back_wheel/encoder_angle", left_back_wheel_angle_);
         register_input("/chassis/lift/right_front_wheel/encoder_angle", right_front_wheel_angle_);
@@ -56,6 +61,16 @@ public:
     }
 
     void update() override {
+        if ((*remote_left_switch_ == rmcs_msgs::Switch::DOWN || *remote_left_switch_ == rmcs_msgs::Switch::UNKNOWN)
+            && (*remote_right_switch_ == rmcs_msgs::Switch::DOWN || *remote_right_switch_ == rmcs_msgs::Switch::UNKNOWN)) {
+            stop_lift();
+            test_init = false;
+            // stop all !!
+        } else if ((*remote_left_switch_ == rmcs_msgs::Switch::MIDDLE ) && (*remote_right_switch_ == rmcs_msgs::Switch::DOWN )) {
+            *left_front_wheel_torque_ = -0.8* remote_left_joystic_-> x();
+            RCLCPP_INFO(get_logger(), "left_front_wheel_torque_%f", *left_front_wheel_torque_);
+            test_init = false;
+        }  else {
         if(test_init == false){
             init_calculator();
             test_init = true;
@@ -81,7 +96,7 @@ public:
         double rf_err = target - s_rf;
         double rb_err = target - s_rb;
 
-        *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.5,0.5);
+        *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8);
         // *left_front_wheel_torque_ = 0.0;
         *left_back_wheel_torque_  = wheel_pids[1].update(lb_err);
         *right_front_wheel_torque_ = wheel_pids[2].update(rf_err);
@@ -90,8 +105,10 @@ public:
         // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_%f", *left_front_wheel_torque_);
         // RCLCPP_INFO(get_logger(), "target%f", target);
         // RCLCPP_INFO(get_logger(), "lf_err%f", lf_err);
-        RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_%f", *left_front_wheel_velocity_);
+        RCLCPP_INFO(get_logger(), "now_angle:%f", *left_front_wheel_angle_);
+        RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_:%f", *left_front_wheel_velocity_);
         RCLCPP_INFO(get_logger(), "s_lf:%f", s_lf);
+        }
     }
 
 private:
@@ -135,6 +152,14 @@ private:
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr chassis_lift_controller_;
 
     // InputInterface<double> target_angle_;
+
+    InputInterface<rmcs_msgs::Switch> remote_left_switch_;
+    InputInterface<rmcs_msgs::Switch> remote_right_switch_;
+
+    InputInterface<Eigen::Vector2d> remote_left_joystic_;
+    InputInterface<Eigen::Vector2d> remote_right_joystic_;
+
+
     InputInterface<double> left_front_wheel_angle_;
     InputInterface<double> left_back_wheel_angle_;
     InputInterface<double> right_front_wheel_angle_;
