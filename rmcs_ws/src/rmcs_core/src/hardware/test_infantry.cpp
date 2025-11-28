@@ -25,6 +25,7 @@ public:
         , logger_(get_logger())
         , infantry_command_(
               create_partner_component<InfantryCommand>(get_component_name() + "_command", *this))
+        , dr16_(*this)
         , transmit_buffer_(*this, 32)
         , event_thread_([this]() { handle_events(); }) {
             
@@ -132,7 +133,7 @@ private:
     };
 
 
-    device::Dr16 dr16_{*this};
+    device::Dr16 dr16_;
 
     // OutputInterface<double> target_angle_;
 
