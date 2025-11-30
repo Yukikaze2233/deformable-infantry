@@ -76,7 +76,7 @@ public:
             test_init = true;
         }
 
-        double target = trapezoidal_calaulator(45.0/* *target_angle_ */);
+        double target = trapezoidal_calculator(45.0/* *target_angle_ */);
         // chassis_lift_controller_ = create_subscription<std_msgs::msg::Int32>(
         // "/chassis/lift/target_angle", rclcpp::QoS{0}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
         //     stop_lift();
@@ -96,18 +96,19 @@ public:
         double rf_err = target - s_rf;
         double rb_err = target - s_rb;
 
-        *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8);
-        // *left_front_wheel_torque_ = 0.0;
+        // *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8);
+        *left_front_wheel_torque_ = 0.0;
         *left_back_wheel_torque_  = wheel_pids[1].update(lb_err);
         *right_front_wheel_torque_ = wheel_pids[2].update(rf_err);
         *right_back_wheel_torque_  = wheel_pids[3].update(rb_err);
 
-        // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_%f", *left_front_wheel_torque_);
-        // RCLCPP_INFO(get_logger(), "target%f", target);
-        // RCLCPP_INFO(get_logger(), "lf_err%f", lf_err);
-        RCLCPP_INFO(get_logger(), "now_angle:%f", *left_front_wheel_angle_);
-        RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_:%f", *left_front_wheel_velocity_);
-        RCLCPP_INFO(get_logger(), "s_lf:%f", s_lf);
+        // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_:%f", *left_front_wheel_torque_);
+        // RCLCPP_INFO(get_logger(), "target:%f", target);
+        // RCLCPP_INFO(get_logger(), "lf_err:%f", lf_err);
+        RCLCPP_INFO(get_logger(), "now_angle:%f", 65 - *left_front_wheel_angle_);
+        // RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_:%f", *left_front_wheel_velocity_);
+        // RCLCPP_INFO(get_logger(), "s_lf:%f", s_lf);
+        RCLCPP_INFO(get_logger(), "angle_calculator:%f", inverse_alpha(s_lf));
         }
     }
 
@@ -120,28 +121,55 @@ private:
         RCLCPP_INFO(get_logger(), "Stopping lift");
     }
 
-    double trapezoidal_calaulator(double alpha) const{
+    double trapezoidal_calculator(double alpha) const{
         double term = Bx * cos(alpha * pi / 180) + By * sin(alpha * pi / 180);
-        double s = term + sqrt(L * L - (By * std::sin(alpha * pi / 180) - By * std::cos(alpha * pi / 180) + 15) * (By * std::sin(alpha * pi / 180) - By * std::cos(alpha * pi / 180) + 15)) - L0;
+        double s = term + sqrt(L * L - (Bx * std::sin(alpha * pi / 180) - By * std::cos(alpha * pi / 180) + 15) * (Bx * std::sin(alpha * pi / 180) - By * std::cos(alpha * pi / 180) + 15)) ;
         return s;
     }
 
     // void init_calculator(std_msgs::msg::Int32::UniquePtr){
-    //     lf = trapezoidal_calaulator(65 - *left_front_wheel_angle_);
-    //     lb = trapezoidal_calaulator(65 - *left_back_wheel_angle_);
-    //     rf = trapezoidal_calaulator(65 - *right_front_wheel_angle_);
-    //     rb = trapezoidal_calaulator(65 - *right_back_wheel_angle_);
+    //     lf = trapezoidal_calculator(65 - *left_front_wheel_angle_);
+    //     lb = trapezoidal_calculator(65 - *left_back_wheel_angle_);
+    //     rf = trapezoidal_calculator(65 - *right_front_wheel_angle_);9
+    //     rb = trapezoidal_calculator(65 - *right_back_wheel_angle_);
     //     s_lf = lf;
     //     s_lb = lb;
     //     s_rf = rf;
     //     s_rb = rb;
     // }
 
+    double angle_calculator(double s) const {
+
+        double A = 2 * s * Bx - 30 * By;   //-3776
+        double B = 2 * s * By + 30 * Bx;   //9910.2
+        double C = s * s + Bx * Bx + By * By - 9775.0;  //1623
+
+        double cos_val = C / std::sqrt(A * A + B * B);
+        cos_val = std::max(-1.0, std::min(1.0, cos_val));
+    
+        return std::atan2(B, A) - std::acos(cos_val);
+    }
+        
+    double inverse_alpha(double s) const {
+
+        double d = sqrt(Bx*Bx + By*By);
+
+        double cos_alpha = (d*d + (s - 15.0)* (s - 15.0) - L*L) / (2 * d * (s - 15.0));
+
+        double beta = acos(cos_alpha); 
+
+        double gamma = atan2(By, Bx); 
+
+        double alpha = gamma - beta; 
+
+        alpha *= 180.0 / pi;
+        return alpha;
+    }
     void init_calculator(){
-        lf = trapezoidal_calaulator(65 - *left_front_wheel_angle_);
-        lb = trapezoidal_calaulator(65 - *left_back_wheel_angle_);
-        rf = trapezoidal_calaulator(65 - *right_front_wheel_angle_);
-        rb = trapezoidal_calaulator(65 - *right_back_wheel_angle_);
+        lf = trapezoidal_calculator(65 - *left_front_wheel_angle_);
+        lb = trapezoidal_calculator(65 - *left_back_wheel_angle_);
+        rf = trapezoidal_calculator(65 - *right_front_wheel_angle_);
+        rb = trapezoidal_calculator(65 - *right_back_wheel_angle_);
         s_lf = lf;
         s_lb = lb;
         s_rf = rf;
