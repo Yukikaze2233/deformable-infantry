@@ -15,3 +15,4 @@ lift_test:
     Rod_relative_horizontal_coordinate: -9.5
     Rod_relative_longitudinal_coordinate: 90.0
     Rod_length: 100.0
+    Load: 16.06153

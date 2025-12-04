@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <ctime>
 
-#include "controller/chassis/csv_file_save.hpp"
 #include "controller/pid/pid_calculator.hpp"
 #include "std_msgs/msg/int32.hpp"
 
@@ -47,6 +46,7 @@ public:
         Bx = get_parameter("Rod_relative_horizontal_coordinate").as_double();
         By = get_parameter("Rod_relative_longitudinal_coordinate").as_double();
         L = get_parameter("Rod_length").as_double();
+        Load = get_parameter("Load").as_double();
         reduction_ratio = get_parameter("reduction_ratio").as_double();
 
         register_output("/chassis/lift/left_front_wheel/control_torque", left_front_wheel_torque_, nan_);
@@ -58,15 +58,10 @@ public:
             pid.output_max = max_torque_;
             pid.output_min = -max_torque_;
         } 
-        csv_recorder_ = std::make_unique<rmcs_core::controller::debug::CSVfilesave>();
-        std::string project_1 = "left_front_wheel_angle_";
-        std::string project_2 = "left_front_wheel_velocity_";
-        std::string project_3 = "left_front_wheel_torque_";
-        csv_recorder_->init_csv_recorder(project_1,project_2,project_3);
+        
     }
 
     void update() override {
-
         double target = trapezoidal_calculator(*target_angle_);
         if (!chassis_lift_controller_) {
             chassis_lift_controller_ = create_subscription<std_msgs::msg::Int32>(
@@ -85,12 +80,17 @@ public:
         double rf_err = s_rf - target;
         double rb_err = s_rb - target;
 
-        *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8);
-        *left_back_wheel_torque_  = std::clamp(wheel_pids[1].update(lb_err),-0.8,0.8);
-        *right_front_wheel_torque_ = std::clamp(wheel_pids[2].update(rf_err),-0.8,0.8);
-        *right_back_wheel_torque_  = std::clamp(wheel_pids[3].update(rb_err),-0.8,0.8);
+        double lf_torque = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8) + frictional_resistance * get_double_sign(lf_err) + feedback_forward(*left_front_wheel_angle_);
+        double lb_torque = std::clamp(wheel_pids[1].update(lb_err),-0.8,0.8) + frictional_resistance * get_double_sign(lb_err) + feedback_forward(*left_back_wheel_angle_);
+        double rf_torque = std::clamp(wheel_pids[2].update(rf_err),-0.8,0.8) + frictional_resistance * get_double_sign(rf_err) + feedback_forward(*right_front_wheel_angle_);
+        double rb_torque = std::clamp(wheel_pids[3].update(rb_err),-0.8,0.8) + frictional_resistance * get_double_sign(rb_err) + feedback_forward(*right_back_wheel_angle_);
 
-        csv_recorder_->record_data(*left_back_wheel_angle_, *left_front_wheel_velocity_, *left_front_wheel_torque_);
+        *left_front_wheel_torque_ = lf_torque;
+        *left_back_wheel_torque_  = lb_torque;
+        *right_front_wheel_torque_ = rf_torque;
+        *right_back_wheel_torque_  = rb_torque;
+
+        
     }
 
 private:
@@ -101,6 +101,20 @@ private:
         *right_front_wheel_torque_ = 0.0;
         *right_back_wheel_torque_ = 0.0;
         RCLCPP_INFO(get_logger(), "Stopping lift");
+    }
+
+    double feedback_forward(double theta ) const{
+        double F_a = 95 * Load * std::cos(theta) / 26;
+        if(std::abs(*left_front_wheel_velocity_) > 0.1){
+            return F_a * 0.001 / (2 * pi) * 0.7 * get_double_sign(*left_front_wheel_velocity_);
+        }else{
+            if(std::abs(*left_front_wheel_torque_) > 0.1){
+                return F_a * 0.001 / (2 * pi) * 0.7 * get_double_sign(*left_front_wheel_torque_);
+            }else{
+                return 0;
+            }
+        }
+
     }
 
     double trapezoidal_calculator(double alpha) const{
@@ -132,10 +146,13 @@ private:
         s_rb = rb;
     }
 
+    static int get_double_sign(double x) {
+        return std::signbit(x) ? -1 : 1;
+    }
+
 
     static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr chassis_lift_controller_;
-    std::unique_ptr<rmcs_core::controller::debug::CSVfilesave> csv_recorder_;
 
     InputInterface<double> target_angle_;
     InputInterface<double> left_front_wheel_angle_;
@@ -166,6 +183,8 @@ private:
     double L0;
     double Bx, By;
     double L;
+    double Load;
+    double frictional_resistance = 0.49158;
     double dt = 0.001;
     double pi = std::numbers::pi;
     double reduction_ratio;

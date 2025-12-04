@@ -25,7 +25,7 @@ public:
     void init_csv_recorder(std::string& name_1 ,std::string& name_2 ,std::string& name_3 ) {
         auto current_path = std::filesystem::current_path();
 
-        // 创建带时间戳的文件名（格式：chassis_lift_YYYYMMDD_HHMMSS.csv）
+        // 创建带时间戳的文件名（格式：data_YYYYMMDD_HHMMSS.csv）
         auto now = std::chrono::system_clock::now();
         auto now_t = std::chrono::system_clock::to_time_t(now);
         thread_local std::tm tm_buf;  
