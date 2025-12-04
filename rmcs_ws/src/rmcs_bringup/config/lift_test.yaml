@@ -4,6 +4,9 @@ rmcs_executor:
     components:
       - rmcs_core::hardware::TestInfantry -> lift_test_infantry
       - rmcs_core::controller::chassis::ChassisLiftController -> lift_test
+      - rmcs_core::controller::smc::SlidingModeController -> smc_controller
+      - rmcs_core::controller::smc::GimbalObserver -> GimbalObserver
+      - rmcs_core::broadcaster::ValueBroadcaster -> broadcaster
 
 lift_test_infantry:
   ros__parameters:
@@ -15,3 +18,33 @@ lift_test:
     Rod_relative_horizontal_coordinate: -9.5
     Rod_relative_longitudinal_coordinate: 90.0
     Rod_length: 100.0
+
+smc_controller:
+  ros__parameters:
+    c: 2.0
+    epsilon: 1.0
+    k: 1.0
+    phi: 0.05
+    J: 0.1
+    B: 0.5
+    gear_ratio: 25.99625553851
+    angle_error: /chassis/lift/lf/control_angle_error
+    current_velocity: /chassis/lift/left_front_wheel/velocity
+    target_velocity: /chassis/lift/left_front_wheel/expect_velocity
+    target_acceleration: /chassis/lift/left_front_wheel/expect_acceleration
+    control_torque: /chassis/lift/left_front_wheel/control_torque
+
+GimbalObserver:
+  ros__parameters:
+    velocity_limit: 1.0
+    acceleration_limit: 0.5
+
+broadcaster:
+  ros__parameters:  
+    forward_list:
+      - /smc/s_value
+      - /chassis/lift/left_front_wheel/expect_velocity
+      - /chassis/lift/left_front_wheel/expect_acceleration
+      - /chassis/lift/left_front_wheel/velocity
+      - /chassis/lift/left_front_wheel/control_torque
+      
