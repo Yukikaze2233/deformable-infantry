@@ -21,13 +21,13 @@ lift_test:
 
 smc_controller:
   ros__parameters:
-    c: 2.0
-    epsilon: 1.0
-    k: 1.0
-    phi: 0.05
-    J: 0.1
-    B: 0.5
-    gear_ratio: 25.99625553851
+    c: 1.0
+    epsilon: 0.3
+    k: 5.0
+    phi: 0.001
+    J: 0.05
+    B: 0.3
+    gear_ratio: 25.0
     angle_error: /chassis/lift/lf/control_angle_error
     current_velocity: /chassis/lift/left_front_wheel/velocity
     target_velocity: /chassis/lift/left_front_wheel/expect_velocity
@@ -36,8 +36,8 @@ smc_controller:
 
 GimbalObserver:
   ros__parameters:
-    velocity_limit: 1.0
-    acceleration_limit: 0.5
+    velocity_limit: 10.0
+    acceleration_limit: 10.0
 
 broadcaster:
   ros__parameters:  
@@ -47,4 +47,5 @@ broadcaster:
       - /chassis/lift/left_front_wheel/expect_acceleration
       - /chassis/lift/left_front_wheel/velocity
       - /chassis/lift/left_front_wheel/control_torque
+      - /chassis/lift/lf/control_angle_error
       

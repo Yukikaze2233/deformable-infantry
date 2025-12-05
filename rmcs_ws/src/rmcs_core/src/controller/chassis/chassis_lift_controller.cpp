@@ -62,7 +62,7 @@ public:
         By = get_parameter("Rod_relative_longitudinal_coordinate").as_double();
         L = get_parameter("Rod_length").as_double();
 
-        register_output("/chassis/lift/left_front_wheel/control_torque", left_front_wheel_torque_, nan_);
+        // register_output("/chassis/lift/left_front_wheel/control_torque", left_front_wheel_torque_, nan_);
         register_output("/chassis/lift/left_back_wheel/control_torque", left_back_wheel_torque_, nan_);
         register_output("/chassis/lift/right_front_wheel/control_torque", right_front_wheel_torque_, nan_);
         register_output("/chassis/lift/right_back_wheel/control_torque", right_back_wheel_torque_, nan_);
@@ -86,7 +86,7 @@ public:
             RCLCPP_INFO(get_logger(), "left_front_wheel_torque_%f", *left_front_wheel_torque_);
             test_init = false;
         } else if ((*remote_left_switch_ == rmcs_msgs::Switch::MIDDLE ) && (*remote_right_switch_ == rmcs_msgs::Switch::MIDDLE )) {
-            *lf_angle_error_ = (65.0 - lift_left_front_angle_filter_.update(*left_front_wheel_angle_)) - 30.0;
+  
             test_init = false;
         } else {
             if(test_init == false){
@@ -97,10 +97,10 @@ public:
 
             double target = trapezoidal_calculator(45.0/* *target_angle_ */);
 
-            s_lf = trapezoidal_calculator(65 - *left_front_wheel_angle_);
-            s_lb = trapezoidal_calculator(65 - *left_back_wheel_angle_);
-            s_rf = trapezoidal_calculator(65 - *right_front_wheel_torque_);
-            s_rb = trapezoidal_calculator(65 - *right_back_wheel_angle_);
+            s_lf -= *left_front_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
+            s_lb -= *left_back_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
+            s_rf -= *right_front_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
+            s_rb -= *right_back_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
     
             double lf_err = s_lf - target;
             double lb_err = s_lb - target;
@@ -113,15 +113,17 @@ public:
             *right_back_wheel_torque_  = std::clamp(wheel_pids[3].update(rb_err),-0.6,0.6);
 
             auto now = std::chrono::steady_clock::now();
-            double elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(now - start_time_).count();
 
+            double elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(now - start_time_).count();
             *left_front_wheel_torque_ = std::clamp(-0.1 * elapsed_time , -6.0, 6.0);
 
-            csv_saver_.record_data(*left_front_wheel_velocity_ , *left_front_wheel_angle_ , *left_front_wheel_torque_);                        //debug
+            *lf_angle_error_ = lf_err;
+
+            // csv_saver_.record_data(*left_front_wheel_velocity_ , *left_front_wheel_angle_ , *left_front_wheel_torque_);                        //debug
             // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_:%f", elapsed_time);
             // RCLCPP_INFO(get_logger(), "target:%f", target);
-            // RCLCPP_INFO(get_logger(), "lf_err:%f", lf_err);
-            // RCLCPP_INFO(get_logger(), "now_angle:%f", 65 - *left_front_wheel_angle_);
+            RCLCPP_INFO(get_logger(), "lf_err:%f", lf_err);
+            RCLCPP_INFO(get_logger(), "now_angle:%f", 65 - *left_front_wheel_angle_);
             // RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_:%f", *left_front_wheel_velocity_);
             // RCLCPP_INFO(get_logger(), "s_lf:%f", s_lf);
             // RCLCPP_INFO(get_logger(), "angle_calculator:%f", angle_calculator(s_lf) * 180 / pi);
@@ -213,6 +215,8 @@ private:
 
     double L0;
     double Bx, By;
+    double dt = 0.001;
+    double reduction_ratio = 14.18523733;
     double L;
     double pi = std::numbers::pi;
     bool test_init = false;
