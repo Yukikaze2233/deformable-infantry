@@ -49,9 +49,13 @@ public:
             *control_torque_ = 0.0;
             return;
         } else{
-            *control_torque_ = std::clamp(calc_control_value(), -0.4, 0.4);
+            if(*angle_error_ < 0.8 && *angle_error_ > -0.8){
+                *control_torque_ =0.0;
+            } else {
+                *control_torque_ = std::clamp(calc_control_value(), -4.0, 4.0);
+            }
         }
-        RCLCPP_INFO(logger_, "control:%8lf", *control_torque_);
+        // RCLCPP_INFO(logger_, "control:%8lf", *control_torque_);
     }
 
 private:

@@ -86,7 +86,6 @@ public:
             RCLCPP_INFO(get_logger(), "left_front_wheel_torque_%f", *left_front_wheel_torque_);
             test_init = false;
         } else if ((*remote_left_switch_ == rmcs_msgs::Switch::MIDDLE ) && (*remote_right_switch_ == rmcs_msgs::Switch::MIDDLE )) {
-  
             test_init = false;
         } else {
             if(test_init == false){
@@ -95,7 +94,7 @@ public:
                 csv_saver_.init_csv_recorder("s1","s2","s3");
             }
 
-            double target = trapezoidal_calculator(45.0/* *target_angle_ */);
+            double target = trapezoidal_calculator(30.0/* *target_angle_ */);
 
             s_lf -= *left_front_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
             s_lb -= *left_back_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
@@ -107,22 +106,30 @@ public:
             double rf_err = s_rf - target;
             double rb_err = s_rb - target;
 
-            *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.6,0.6);
+            // *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.6,0.6);
             *left_back_wheel_torque_  = std::clamp(wheel_pids[1].update(lb_err),-0.6,0.6);
             *right_front_wheel_torque_ = std::clamp(wheel_pids[2].update(rf_err),-0.6,0.6);
             *right_back_wheel_torque_  = std::clamp(wheel_pids[3].update(rb_err),-0.6,0.6);
 
-            auto now = std::chrono::steady_clock::now();
+            // auto now = std::chrono::steady_clock::now();
 
-            double elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(now - start_time_).count();
-            *left_front_wheel_torque_ = std::clamp(-0.1 * elapsed_time , -6.0, 6.0);
+            // double elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(now - start_time_).count();
+            // *left_front_wheel_torque_ = std::clamp(-0.1 * elapsed_time , 0.8, 0.8);
 
-            *lf_angle_error_ = lf_err;
+            *lf_angle_error_ = lf_err;  // smc
 
-            // csv_saver_.record_data(*left_front_wheel_velocity_ , *left_front_wheel_angle_ , *left_front_wheel_torque_);                        //debug
-            // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_:%f", elapsed_time);
-            // RCLCPP_INFO(get_logger(), "target:%f", target);
-            RCLCPP_INFO(get_logger(), "lf_err:%f", lf_err);
+            torque += k * 0.001;
+            if (*left_front_wheel_velocity_ > 0.040277 || *left_front_wheel_velocity_ < -0.032222){
+                k = 0;
+            }else{
+                k = 0.01;
+            }
+
+            *left_front_wheel_torque_ = torque;
+
+            // csv_saver_.record_data((65 - *left_front_wheel_angle_ ), *left_front_wheel_torque_ , *left_front_wheel_velocity_);                        //debug
+            // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_:%f", *left_front_wheel_torque_);
+            // RCLCPP_INFO(get_logger(), "lf_err:%f", lf_err);
             RCLCPP_INFO(get_logger(), "now_angle:%f", 65 - *left_front_wheel_angle_);
             // RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_:%f", *left_front_wheel_velocity_);
             // RCLCPP_INFO(get_logger(), "s_lf:%f", s_lf);
@@ -213,10 +220,14 @@ private:
     double lf, lb, rf, rb;
     double s_lf, s_lb, s_rf, s_rb;
 
+
+    double torque = 0.0;
+    double k = 0.0;
+
     double L0;
     double Bx, By;
     double dt = 0.001;
-    double reduction_ratio = 14.18523733;
+    double reduction_ratio = 14.105;
     double L;
     double pi = std::numbers::pi;
     bool test_init = false;
