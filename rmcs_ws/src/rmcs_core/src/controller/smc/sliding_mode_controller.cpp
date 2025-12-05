@@ -32,7 +32,7 @@ public:
         register_input(get_parameter("target_velocity").as_string(), target_velocity_);
         register_input(get_parameter("target_acceleration").as_string(), target_acceleration_);
 
-        // register_output(get_parameter("control_torque").as_string(), control_torque_);
+        register_output(get_parameter("control_torque").as_string(), control_torque_);
 
         // debug
         register_output("/smc/s_value", sliding_surface_value_);
@@ -49,7 +49,7 @@ public:
             *control_torque_ = 0.0;
             return;
         } else{
-            *control_torque_ = std::clamp(calc_control_value(), -0.6, 0.6);
+            *control_torque_ = std::clamp(calc_control_value(), -0.4, 0.4);
         }
         RCLCPP_INFO(logger_, "control:%8lf", *control_torque_);
     }
