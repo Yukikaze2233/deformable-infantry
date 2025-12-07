@@ -2,10 +2,10 @@
 #include <cmath>
 #include <cstdint>
 
-#include <rmcs_msgs/game_stage.hpp>
 #include <rclcpp/node.hpp>
 #include <rmcs_executor/component.hpp>
 #include <rmcs_msgs/chassis_mode.hpp>
+#include <rmcs_msgs/game_stage.hpp>
 #include <rmcs_msgs/mouse.hpp>
 #include <rmcs_msgs/shoot_mode.hpp>
 
@@ -36,7 +36,7 @@ public:
         register_input("/chassis/control_angle", chassis_control_angle_);
 
         register_input("/chassis/supercap/voltage", supercap_voltage_);
-        register_input("/chassis/supercap/control_enable", supercap_control_enabled_);
+        // register_input("/chassis/supercap/control_enable", supercap_control_enabled_);
 
         register_input("/chassis/voltage", chassis_voltage_);
         register_input("/chassis/power", chassis_power_);
@@ -89,7 +89,7 @@ private:
         status_ring_.update_friction_wheel_speed(
             std::min(*left_friction_velocity_, *right_friction_velocity_),
             *left_friction_control_velocity_ > 0);
-        status_ring_.update_supercap(*supercap_voltage_, *supercap_control_enabled_);
+        status_ring_.update_supercap(*supercap_voltage_, true);
         status_ring_.update_battery_power(*chassis_voltage_);
         update_static_status_ring();
     }
@@ -99,11 +99,10 @@ private:
                                ? *gimbal_pitch_angle_ - 2 * std::numbers::pi
                                : *gimbal_pitch_angle_;
 
-        rangefinder_.update_pitch_angle(
-            -display_angle, *shoot_mode_ == rmcs_msgs::ShootMode::PRECISE);
+        rangefinder_.update_pitch_angle(-display_angle);
 
-        double raw_height    = -display_angle / 0.7 * static_cast<double>(height_max);
-        raw_height           = std::clamp(raw_height, 0.0, static_cast<double>(height_max));
+        double raw_height = -display_angle / 0.7 * static_cast<double>(height_max);
+        raw_height = std::clamp(raw_height, 0.0, static_cast<double>(height_max));
         uint16_t lift_height = static_cast<uint16_t>(std::round(raw_height));
 
         lift_height = std::clamp(lift_height, height_min, height_max);
@@ -117,7 +116,7 @@ private:
 
     void update_static_status_ring() {
         auto auto_aim_enable = mouse_->right == 1;
-        auto precise_enable  = *shoot_mode_ == rmcs_msgs::ShootMode::PRECISE;
+        auto precise_enable = *shoot_mode_ == rmcs_msgs::ShootMode::PRECISE;
 
         status_ring_.update_static_parts({auto_aim_enable, precise_enable});
     }
