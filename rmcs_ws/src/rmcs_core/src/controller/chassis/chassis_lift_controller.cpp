@@ -63,27 +63,21 @@ public:
 
     void update() override {
         double target = trapezoidal_calculator(*target_angle_);
-        if (!chassis_lift_controller_) {
-            chassis_lift_controller_ = create_subscription<std_msgs::msg::Int32>(
-                "/chassis/lift/target_angle", rclcpp::QoS{10}, [this](std_msgs::msg::Int32::UniquePtr&& msg) {
-                    stop_lift();
-                    init_calculator(std::move(msg));
-                });
-        }
-        s_lf -= *left_front_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
-        s_lb -= *left_back_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
-        s_rf -= *right_front_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
-        s_rb -= *right_back_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
+        
+        s_lf = trapezoidal_calculator(65 - *left_front_wheel_angle_);
+        s_lb = trapezoidal_calculator(65 - *left_back_wheel_angle_);
+        s_rf = trapezoidal_calculator(65 - *right_front_wheel_angle_);
+        s_rb = trapezoidal_calculator(65 - *right_back_wheel_angle_);
 
         double lf_err = s_lf - target;
         double lb_err = s_lb - target;
         double rf_err = s_rf - target;
         double rb_err = s_rb - target;
 
-        double lf_torque = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8) + frictional_resistance * get_double_sign(lf_err) + feedback_forward(*left_front_wheel_angle_);
-        double lb_torque = std::clamp(wheel_pids[1].update(lb_err),-0.8,0.8) + frictional_resistance * get_double_sign(lb_err) + feedback_forward(*left_back_wheel_angle_);
-        double rf_torque = std::clamp(wheel_pids[2].update(rf_err),-0.8,0.8) + frictional_resistance * get_double_sign(rf_err) + feedback_forward(*right_front_wheel_angle_);
-        double rb_torque = std::clamp(wheel_pids[3].update(rb_err),-0.8,0.8) + frictional_resistance * get_double_sign(rb_err) + feedback_forward(*right_back_wheel_angle_);
+        double lf_torque = std::clamp(wheel_pids[0].update(lf_err),-0.8,0.8) + frictional_resistance * get_double_sign(lf_err) + feedback_forward(65 - *left_front_wheel_angle_);
+        double lb_torque = std::clamp(wheel_pids[1].update(lb_err),-0.8,0.8) + frictional_resistance * get_double_sign(lb_err) + feedback_forward(65 - *left_back_wheel_angle_);
+        double rf_torque = std::clamp(wheel_pids[2].update(rf_err),-0.8,0.8) + frictional_resistance * get_double_sign(rf_err) + feedback_forward(65 - *right_front_wheel_angle_);
+        double rb_torque = std::clamp(wheel_pids[3].update(rb_err),-0.8,0.8) + frictional_resistance * get_double_sign(rb_err) + feedback_forward(65 - *right_back_wheel_angle_);
 
         *left_front_wheel_torque_ = lf_torque;
         *left_back_wheel_torque_  = lb_torque;
@@ -114,7 +108,6 @@ private:
                 return 0;
             }
         }
-
     }
 
     double trapezoidal_calculator(double alpha) const{
