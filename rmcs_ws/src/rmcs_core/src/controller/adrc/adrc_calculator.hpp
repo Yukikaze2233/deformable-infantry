@@ -2,7 +2,6 @@
 #define PURE_ADRC_CONTROLLER_H
 
 #include <cmath>
-#include <stdexcept>
 
 namespace rmcs_core::controller::adrc{
 

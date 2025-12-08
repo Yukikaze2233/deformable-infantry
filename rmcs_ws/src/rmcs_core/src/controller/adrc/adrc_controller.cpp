@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -21,6 +22,7 @@ public:
         register_input(get_parameter("target").as_string(), target_);
         
         register_output(get_parameter("control").as_string(), control_error);
+        KT = get_parameter("kt").as_double();
 
         adrc_calculator.set_params(
             R = get_parameter("r").as_double(),   // R
@@ -28,11 +30,11 @@ public:
             BETA01 = get_parameter("beta01").as_double(),  // BETA01
             BETA02 = get_parameter("beta02").as_double(),   // BETA02
             BETA03 = get_parameter("beta03").as_double(),    // BETA03
-            ALPHA1 = get_parameter("alphe1").as_double(),    // ALPHA1
+            ALPHA1 = get_parameter("alpha1").as_double(),    // ALPHA1
             ALPHA2 = get_parameter("alpha2").as_double(),    // ALPHA2
             DELTA = get_parameter("delta").as_double(),   // DELTA
             KP = get_parameter("kp").as_double(),   // KP
-            KD = get_parameter("kd").as_double()     // KD
+            KD = get_parameter("kd").as_double()   // KD
         );
 
         output_max = get_parameter_or("output_max",inf);
@@ -41,11 +43,11 @@ public:
 
     void update() override {
         if((*target_ - last_target) != 0){
-            last_control = 0;
+            last_control = *control_error;
             last_target = *target_;
         }else{
-            *control_error = adrc_calculator.update(*target_ ,*measurement_ ,last_control) * dt;
-            last_control = *control_error * dt + *measurement_;
+            *control_error = std::clamp(KT * adrc_calculator.update(*target_ ,*measurement_ ,last_control) * dt ,output_min ,output_max);
+            last_control = *control_error ;
         }
     }
 
@@ -61,7 +63,8 @@ private:
     double DELTA;
     double KP;
     double KD;
-    double last_target, last_control;
+    double KT = 1; //扭矩转化系数
+    double last_target = 0, last_control = 0;
     double output_max = inf ,output_min = -inf;
     double dt = 0.001;
 
@@ -72,7 +75,7 @@ private:
         static constexpr double inf = std::numeric_limits<double>::infinity();
 };
 
-} // namespace rmcs_core::controller::pid
+} // namespace rmcs_core::controller::adrc
 
 #include <pluginlib/class_list_macros.hpp>
 
