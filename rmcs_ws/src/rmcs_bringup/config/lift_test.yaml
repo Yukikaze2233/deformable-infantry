@@ -4,7 +4,7 @@ rmcs_executor:
     components:
       - rmcs_core::hardware::TestInfantry -> lift_test_infantry
       - rmcs_core::controller::chassis::ChassisLiftController -> lift_test
-
+      #- rmcs_core::controller::adrc -> lift_adrc_test
 lift_test_infantry:
   ros__parameters:
     usb_pid: -1
@@ -16,3 +16,24 @@ lift_test:
     Rod_relative_longitudinal_coordinate: 90.0
     Rod_length: 100.0
     Load: 16.06153
+
+
+#An example
+# lift_adrc_test:
+#   ros__parameters:
+#     measurement: /chassis/lift/left_front_wheel/encoder_angle
+#     target: /chassis/lift/target_angle
+#     control: /chassis/lift/left_front_wheel/control_torque
+#     kt: 1.0
+#     r: 50.0
+#     b0: 1.0
+#     beta01: 120.0
+#     beta02: 30.0
+#     beta03: 8.0
+#     alpha1: 0.5
+#     alpha2: 0.2
+#     delta: 0.01 
+#     kp: 25.0
+#     kd: 6.0
+#     output_max: 114514.0
+#     output_min: 114514.0
