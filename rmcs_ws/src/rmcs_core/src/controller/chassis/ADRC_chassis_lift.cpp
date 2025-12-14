@@ -43,9 +43,9 @@ public:
         register_output("/chassis/lift/right_front_wheel/control_torque", right_front_wheel_torque_, nan_);
         register_output("/chassis/lift/right_back_wheel/control_torque", right_back_wheel_torque_, nan_);
 
-        wheel_adrcs[0].set_params(50.0, 1.0, 2.0, 0.5, 0.2, 0.01, 25.0, 6.0);
+        wheel_adrcs[0].set_params(5.0, 1.0, 2.0, 0.5, 0.2, 0.01, 25.0, 6.0);
         for (int i = 1; i < 4; ++i) {
-            wheel_adrcs[i].set_params(50.0, 1.0, 2.0, 0.5, 0.2, 0.01, 25.0, 6.0);
+            wheel_adrcs[i].set_params(5.0, 1.0, 2.0, 0.5, 0.2, 0.01, 25.0, 6.0);
         }
 
         init_displacement();

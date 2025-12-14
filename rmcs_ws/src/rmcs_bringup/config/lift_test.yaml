@@ -25,13 +25,13 @@ lift_test:
 #     target: /chassis/lift/target_angle
 #     control: /chassis/lift/left_front_wheel/control_torque
 #     kt: 1.0 #转矩参数
-#     r: 25.0 #w_c * w_c w_c为控制器带宽
+#     wc: 5.0 #w_c * w_c w_c为控制器带宽
 #     b0: 1.0
 #     w0: 167.0 #w_0为观测器带宽
 #     alpha1: 0.5
 #     alpha2: 0.2
 #     delta: 0.01 #5~10 * 0.001
-#     kp: 500.0 #w_c
-#     kd: 250.0 #w_c/2
+#     kp: 5.0 #w_c
+#     kd: 2.5.0 #w_c/2
 #     output_max: 114514.0
 #     output_min: -114514.0

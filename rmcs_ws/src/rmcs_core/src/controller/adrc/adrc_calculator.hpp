@@ -40,9 +40,9 @@ public:
         }
     }
 
-    void set_params(double r, double b0, double w0,
+    void set_params(double wc, double b0, double w0,
                     double alpha1, double alpha2, double delta, double kp, double kd) {
-        r_ = r;
+        r_ = wc * wc;
         b0_ = b0;
         beta01_ = 3 * w0;
         beta02_ = 3 * w0 * w0;
@@ -89,6 +89,12 @@ private:
         return (u0 - z3_) / b0_;
     }
 
+    double nlsef_link() const {
+        double e1 = v1_ - z1_; 
+        double u0 = e1 * r_ + z2_ * std::pow(r_, 0.5) * 2;
+        return (u0 - z3_) / b0_;
+    }
+
     static double fst(double e, double ed, double r, double h) {
         double d = r * pow(h, 2);
         double a0 = h * ed;
@@ -105,7 +111,7 @@ private:
     }
 
     void init_default_params() {
-        r_ = 50.0;          
+        r_ = 5.0;          
         b0_ = 1.0;          
         beta01_ = 100.0;    
         beta02_ = 20.0;     
