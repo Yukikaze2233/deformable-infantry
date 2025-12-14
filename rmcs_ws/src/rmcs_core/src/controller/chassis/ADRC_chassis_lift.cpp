@@ -43,9 +43,9 @@ public:
         register_output("/chassis/lift/right_front_wheel/control_torque", right_front_wheel_torque_, nan_);
         register_output("/chassis/lift/right_back_wheel/control_torque", right_back_wheel_torque_, nan_);
 
-        wheel_adrcs[0].set_params(50.0, 1.0, 120.0, 30.0, 8.0, 0.5, 0.2, 0.01, 25.0, 6.0);
+        wheel_adrcs[0].set_params(50.0, 1.0, 2.0, 0.5, 0.2, 0.01, 25.0, 6.0);
         for (int i = 1; i < 4; ++i) {
-            wheel_adrcs[i].set_params(50.0, 1.0, 120.0, 30.0, 8.0, 0.5, 0.2, 0.01, 25.0, 6.0);
+            wheel_adrcs[i].set_params(50.0, 1.0, 2.0, 0.5, 0.2, 0.01, 25.0, 6.0);
         }
 
         init_displacement();
@@ -60,19 +60,19 @@ public:
         s_rb = trapezoidal_calculator(65 - *right_back_wheel_angle_);
 
         double lf_adrc_output = wheel_adrcs[0].compute_adrc_output(target_s, s_lf, last_u[0]);
-        last_u[0] = s_lf + lf_adrc_output * dt;
+        last_u[0] = lf_adrc_output;
         double lf_err = s_lf - last_u[0];
         
         double lb_adrc_output = wheel_adrcs[1].compute_adrc_output(target_s, s_lb, last_u[1]);
-        last_u[1] = s_lb + lb_adrc_output * dt;
+        last_u[1] = lb_adrc_output;
         double lb_err = s_lb - last_u[1];
         
         double rf_adrc_output = wheel_adrcs[2].compute_adrc_output(target_s, s_rf, last_u[2]);
-        last_u[2] = s_rf + rf_adrc_output * dt;
+        last_u[2] = rf_adrc_output;
         double rf_err = s_rf - last_u[2];
         
         double rb_adrc_output = wheel_adrcs[3].compute_adrc_output(target_s, s_rb, last_u[3]);
-        last_u[3] = s_rb + rb_adrc_output * dt;
+        last_u[3] = rb_adrc_output;
         double rb_err = s_rb - last_u[3];
 
         double lf_torque = calculate_torque(lf_err);

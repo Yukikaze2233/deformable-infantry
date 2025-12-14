@@ -27,9 +27,7 @@ public:
         adrc_calculator.set_params(
             R = get_parameter("r").as_double(),   // R
             B0 = get_parameter("b0").as_double(),    // B0
-            BETA01 = get_parameter("beta01").as_double(),  // BETA01
-            BETA02 = get_parameter("beta02").as_double(),   // BETA02
-            BETA03 = get_parameter("beta03").as_double(),    // BETA03
+            w0 = get_parameter("w0").as_double(),   //w0
             ALPHA1 = get_parameter("alpha1").as_double(),    // ALPHA1
             ALPHA2 = get_parameter("alpha2").as_double(),    // ALPHA2
             DELTA = get_parameter("delta").as_double(),   // DELTA
@@ -55,9 +53,7 @@ private:
     ADRCController adrc_calculator;
     double R;
     double B0;
-    double BETA01;
-    double BETA02;
-    double BETA03;
+    double w0;
     double ALPHA1;
     double ALPHA2;
     double DELTA;

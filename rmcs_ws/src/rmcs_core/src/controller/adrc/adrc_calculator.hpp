@@ -40,13 +40,13 @@ public:
         }
     }
 
-    void set_params(double r, double b0, double beta01, double beta02, double beta03,
+    void set_params(double r, double b0, double w0,
                     double alpha1, double alpha2, double delta, double kp, double kd) {
         r_ = r;
         b0_ = b0;
-        beta01_ = beta01;
-        beta02_ = beta02;
-        beta03_ = beta03;
+        beta01_ = 3 * w0;
+        beta02_ = 3 * w0 * w0;
+        beta03_ = w0 * w0 * w0;
         alpha1_ = alpha1;
         alpha2_ = alpha2;
         delta_ = delta;
