@@ -82,8 +82,19 @@ public:
             test_init = false;
             // stop all !!
         } else if ((*remote_left_switch_ == rmcs_msgs::Switch::MIDDLE ) && (*remote_right_switch_ == rmcs_msgs::Switch::DOWN )) {
-            *left_front_wheel_torque_ = -0.8* remote_left_joystic_-> x();
-            RCLCPP_INFO(get_logger(), "left_front_wheel_torque_%f", *left_front_wheel_torque_);
+            *left_front_wheel_torque_ = -1.0* remote_left_joystic_-> x();
+            *left_back_wheel_torque_ = -1.0* remote_left_joystic_-> y();
+            *right_front_wheel_torque_ = -1.0* remote_right_joystic_-> x();
+            *right_back_wheel_torque_ = -2.0* remote_right_joystic_-> y();
+            RCLCPP_INFO(get_logger(), "lf_angle%f",319 - *left_front_wheel_angle_);
+            RCLCPP_INFO(get_logger(), "lb_angle--%f",211.7 - *left_back_wheel_angle_);
+            if(*right_front_wheel_angle_ > 180){
+                RCLCPP_INFO(get_logger(), "rf_angle----%f",401 - *right_front_wheel_angle_);
+            }else{
+                RCLCPP_INFO(get_logger(), "rf_angle----%f",41 - *right_front_wheel_angle_);
+            }
+            RCLCPP_INFO(get_logger(), "rb_angle------%f",339 - *right_back_wheel_angle_);
+    
             test_init = false;
         } else if ((*remote_left_switch_ == rmcs_msgs::Switch::MIDDLE ) && (*remote_right_switch_ == rmcs_msgs::Switch::MIDDLE )) {
             test_init = false;
@@ -91,10 +102,10 @@ public:
             if(test_init == false){
                 init_calculator();
                 test_init = true;
-                csv_saver_.init_csv_recorder("s1","s2","s3");
+                // csv_saver_.init_csv_recorder("s1","s2","s3");
             }
 
-            double target = trapezoidal_calculator(30.0/* *target_angle_ */);
+            double target = trapezoidal_calculator(45.0/* *target_angle_ */);
 
             s_lf -= *left_front_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
             s_lb -= *left_back_wheel_velocity_/(2 * pi) * dt * reduction_ratio;
@@ -107,9 +118,9 @@ public:
             double rb_err = s_rb - target;
 
             // *left_front_wheel_torque_ = std::clamp(wheel_pids[0].update(lf_err),-0.6,0.6);
-            *left_back_wheel_torque_  = std::clamp(wheel_pids[1].update(lb_err),-0.6,0.6);
-            *right_front_wheel_torque_ = std::clamp(wheel_pids[2].update(rf_err),-0.6,0.6);
-            *right_back_wheel_torque_  = std::clamp(wheel_pids[3].update(rb_err),-0.6,0.6);
+            // *left_back_wheel_torque_  = std::clamp(wheel_pids[1].update(lb_err),-0.6,0.6);
+            // *right_front_wheel_torque_ = std::clamp(wheel_pids[2].update(rf_err),-0.6,0.6);
+            // *right_back_wheel_torque_  = std::clamp(wheel_pids[3].update(rb_err),-0.6,0.6);
 
             // auto now = std::chrono::steady_clock::now();
 
@@ -130,7 +141,7 @@ public:
             // csv_saver_.record_data((65 - *left_front_wheel_angle_ ), *left_front_wheel_torque_ , *left_front_wheel_velocity_);                        //debug
             // RCLCPP_INFO(get_logger(), "left_front_wheel_torque_:%f", *left_front_wheel_torque_);
             // RCLCPP_INFO(get_logger(), "lf_err:%f", lf_err);
-            RCLCPP_INFO(get_logger(), "now_angle:%f", 65 - *left_front_wheel_angle_);
+            // RCLCPP_INFO(get_logger(), "now_angle:%f", 65 - *left_front_wheel_angle_);
             // RCLCPP_INFO(get_logger(), "left_front_wheel_velocity_:%f", *left_front_wheel_velocity_);
             // RCLCPP_INFO(get_logger(), "s_lf:%f", s_lf);
             // RCLCPP_INFO(get_logger(), "angle_calculator:%f", angle_calculator(s_lf) * 180 / pi);
@@ -168,8 +179,8 @@ private:
     }
 
     void init_calculator(){
-        lf = trapezoidal_calculator(65 - *left_front_wheel_angle_);
-        lb = trapezoidal_calculator(65 - *left_back_wheel_angle_);
+        lf = trapezoidal_calculator( 319 - *left_front_wheel_angle_);
+        lb = trapezoidal_calculator(211.9 - *left_back_wheel_angle_);
         rf = trapezoidal_calculator(65 - *right_front_wheel_angle_);
         rb = trapezoidal_calculator(65 - *right_back_wheel_angle_);
         s_lf = lf;

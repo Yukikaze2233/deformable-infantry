@@ -2,9 +2,6 @@ rmcs_executor:
   ros__parameters:
     update_rate: 1000.0
     components:
-<<<<<<< HEAD:rmcs_ws/src/rmcs_bringup/config/mecanum-hero.yaml
-      - rmcs_core::hardware::Hero -> hero_hardware
-=======
       - rmcs_core::hardware::TunnelInfantry -> tunnel_omni_hardware
 
       - rmcs_core::controller::gimbal::GimbalController -> gimbal_controller
@@ -25,7 +22,6 @@ rmcs_executor:
       - rmcs_core::controller::chassis::OmniWheelController -> omni_wheel_controller
 
       - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
->>>>>>> 5148e1a (fixed feedforward_):rmcs_ws/src/rmcs_bringup/config/infantry_a.yaml
 
       - rmcs_core::referee::Status -> referee_status
       - rmcs_core::referee::Command -> referee_command
@@ -79,9 +75,6 @@ yaw_angle_pid_controller:
     measurement: /gimbal/yaw/control_angle_error
     feedforward: -/chassis/yaw/velocity_imu
     control: /gimbal/yaw/control_velocity
-<<<<<<< HEAD:rmcs_ws/src/rmcs_bringup/config/mecanum-hero.yaml
-    kp: 16.0
-=======
     kp: 15.0
     ki: 0.0
     kd: 0.0
@@ -92,7 +85,6 @@ yaw_velocity_pid_controller:
     setpoint: /gimbal/yaw/control_velocity
     control: /gimbal/yaw/raw_control_torque
     kp: 3.5
->>>>>>> 5148e1a (fixed feedforward_):rmcs_ws/src/rmcs_bringup/config/infantry_a.yaml
     ki: 0.0
     kd: 0.0
 
