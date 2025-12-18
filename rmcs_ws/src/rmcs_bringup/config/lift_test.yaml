@@ -32,6 +32,6 @@ lift_test:
 #     alpha2: 0.2
 #     delta: 0.01 #5~10 * 0.001
 #     kp: 5.0 #w_c
-#     kd: 2.5.0 #w_c/2
+#     kd: 2.5 #w_c/2
 #     output_max: 114514.0
 #     output_min: -114514.0
