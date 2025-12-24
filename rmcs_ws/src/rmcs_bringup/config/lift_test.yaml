@@ -4,8 +4,15 @@ rmcs_executor:
     components:
       - rmcs_core::hardware::TestInfantry -> lift_test_infantry
       - rmcs_core::controller::chassis::ChassisLiftController -> lift_test
-      - rmcs_core::controller::smc::SlidingModeController -> smc_controller
-      - rmcs_core::controller::smc::GimbalObserver -> GimbalObserver
+      - rmcs_core::controller::smc::SlidingModeController -> smc_controller0
+      - rmcs_core::controller::smc::SlidingModeController -> smc_controller1
+      - rmcs_core::controller::smc::SlidingModeController -> smc_controller2
+      - rmcs_core::controller::smc::SlidingModeController -> smc_controller3
+
+      - rmcs_core::controller::smc::GimbalObserver -> GimbalObserver0
+      - rmcs_core::controller::smc::GimbalObserver -> GimbalObserver1
+      - rmcs_core::controller::smc::GimbalObserver -> GimbalObserver2
+      - rmcs_core::controller::smc::GimbalObserver -> GimbalObserver3
       - rmcs_core::broadcaster::ValueBroadcaster -> broadcaster
 
 lift_test_infantry:
@@ -19,7 +26,7 @@ lift_test:
     Rod_relative_longitudinal_coordinate: 90.0
     Rod_length: 100.0
 
-smc_controller:
+smc_controller0:
   ros__parameters:
     c: 2.0
     epsilon: 1.0
@@ -34,19 +41,93 @@ smc_controller:
     target_acceleration: /chassis/lift/left_front_wheel/expect_acceleration
     control_torque: /chassis/lift/left_front_wheel/control_torque
 
-GimbalObserver:
+smc_controller1:
+  ros__parameters:
+    c: 2.0
+    epsilon: 1.0
+    k: 6.0
+    phi: 0.5
+    J: 2.0
+    B: 0.5
+    gear_ratio: 25.99
+    angle_error: /chassis/lift/lb/control_angle_error
+    current_velocity: /chassis/lift/left_back_wheel/velocity
+    target_velocity: /chassis/lift/left_back_wheel/expect_velocity
+    target_acceleration: /chassis/lift/left_back_wheel/expect_acceleration
+    control_torque: /chassis/lift/left_back_wheel/control_torque
+
+smc_controller2:
+  ros__parameters:
+    c: 2.0
+    epsilon: 1.0
+    k: 6.0
+    phi: 0.5
+    J: 2.0
+    B: 0.5
+    gear_ratio: 25.99
+    angle_error: /chassis/lift/rf/control_angle_error
+    current_velocity: /chassis/lift/right_front_wheel/velocity
+    target_velocity: /chassis/lift/right_front_wheel/expect_velocity
+    target_acceleration: /chassis/lift/right_front_wheel/expect_acceleration
+    control_torque: /chassis/lift/right_front_wheel/control_torque
+
+smc_controller3:
+  ros__parameters:
+    c: 2.0
+    epsilon: 1.0
+    k: 6.0
+    phi: 0.5
+    J: 2.0
+    B: 0.5
+    gear_ratio: 25.99
+    angle_error: /chassis/lift/rb/control_angle_error
+    current_velocity: /chassis/lift/right_back_wheel/velocity
+    target_velocity: /chassis/lift/right_back_wheel/expect_velocity
+    target_acceleration: /chassis/lift/right_back_wheel/expect_acceleration
+    control_torque: /chassis/lift/right_back_wheel/control_torque
+
+GimbalObserver0:
   ros__parameters:
     velocity_limit: 10.0
     acceleration_limit: 5.0
+    control_error: /chassis/lift/lf/control_angle_error
+    velocity: /chassis/lift/left_front_wheel/velocity
+    yaw_expect_velocity_: /chassis/lift/left_front_wheel/expect_velocity
+    yaw_expect_acceleration_: /chassis/lift/left_front_wheel/expect_acceleration
+
+GimbalObserver1:
+  ros__parameters:
+    velocity_limit: 10.0
+    acceleration_limit: 5.0
+    control_error: /chassis/lift/lb/control_angle_error
+    velocity: /chassis/lift/left_back_wheel/velocity
+    yaw_expect_velocity_: /chassis/lift/left_back_wheel/expect_velocity
+    yaw_expect_acceleration_: /chassis/lift/left_back_wheel/expect_acceleration
+
+GimbalObserver2:
+  ros__parameters:
+    velocity_limit: 10.0
+    acceleration_limit: 5.0
+    control_error: /chassis/lift/rf/control_angle_error
+    velocity: /chassis/lift/right_front_wheel/velocity 
+    yaw_expect_velocity_: /chassis/lift/right_front_wheel/expect_velocity
+    yaw_expect_acceleration_: /chassis/lift/right_front_wheel/expect_acceleration
+
+GimbalObserver3:
+  ros__parameters:
+    velocity_limit: 10.0
+    acceleration_limit: 5.0
+    control_error: /chassis/lift/rb/control_angle_error
+    velocity: /chassis/lift/right_back_wheel/velocity
+    yaw_expect_velocity_: /chassis/lift/right_back_wheel/expect_velocity
+    yaw_expect_acceleration_: /chassis/lift/right_back_wheel/expect_acceleration
 
 broadcaster:
   ros__parameters:  
     forward_list:
-      - /smc/s_value
-      - /chassis/lift/left_front_wheel/expect_velocity
-      - /chassis/lift/left_front_wheel/expect_acceleration
-      - /chassis/lift/left_front_wheel/velocity
-      - /chassis/lift/left_front_wheel/control_torque
-      - /chassis/lift/lf/control_angle_error
       - /chassis/lift/left_front_wheel/encoder_angle
+      - /chassis/lift/left_back_wheel/encoder_angle
+      - /chassis/lift/right_front_wheel/encoder_angle
+      - /chassis/lift/right_back_wheel/encoder_angle
+      - /target/input
       

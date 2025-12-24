@@ -24,7 +24,7 @@ public:
         phi_     = get_parameter("phi").as_double();
 
         moment_of_inertia_    = get_parameter("J").as_double();
-        damping_conefficient_ = get_parameter("B").as_double();
+        damping_coefficient_ = get_parameter("B").as_double();
         gear_ratio            = get_parameter("gear_ratio").as_double();
 
         register_input(get_parameter("angle_error").as_string(), angle_error_);
@@ -35,7 +35,7 @@ public:
         register_output(get_parameter("control_torque").as_string(), control_torque_);
 
         // debug
-        register_output("/smc/s_value", sliding_surface_value_);
+        // register_output("/smc/s_value", sliding_surface_value_);
     }
 
     void update() override {
@@ -45,17 +45,12 @@ public:
             reset();
             return;
         }
-        if((*switch_left_ == rmcs_msgs::Switch::DOWN && *switch_right_ == rmcs_msgs::Switch::MIDDLE)){
-            *control_torque_ = 0.0;
-            return;
-        } else{
-            if(*angle_error_ < 0.8 && *angle_error_ > -0.8){
-                *control_torque_ =0.0;
-            } else {
-                *control_torque_ = std::clamp(calc_control_value(), -0.5, 0.5);
-            }
-        }
-        RCLCPP_INFO(logger_, "control:%8lf", *control_torque_);
+            // if(*angle_error_ < 0.8 && *angle_error_ > -0.8){             // dead zone
+            //     *control_torque_ =0.0;
+            // } else {
+                *control_torque_ = std::clamp(calc_control_value(), -2.5, 2.5);
+            // }
+        // RCLCPP_INFO(logger_, "control:%8lf", *control_torque_);    //debug
     }
 
 private:
@@ -72,7 +67,7 @@ private:
         *sliding_surface_value_ = s;
 
         // damping term
-        double damping_term = damping_conefficient_ * (*current_velocity_);
+        double damping_term = damping_coefficient_ * (*current_velocity_);
 
         // acceleration feed forward term
         double feedforward_term = moment_of_inertia_ * (*target_acceleration_);
@@ -116,7 +111,7 @@ private:
 
     // mechanical parameters
     double moment_of_inertia_;
-    double damping_conefficient_;
+    double damping_coefficient_;
     double sliding_surface_value_integral_ = 0;
     double gear_ratio; // 传动增益，传动比*效率的倒数
 

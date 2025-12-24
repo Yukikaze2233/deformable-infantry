@@ -18,11 +18,11 @@ public:
         velocity_limit_     = get_parameter("velocity_limit").as_double();
         acceleration_limit_ = get_parameter("acceleration_limit").as_double();
 
-        register_input("/chassis/lift/lf/control_angle_error", yaw_angle_error_);
-        register_input("/chassis/lift/left_front_wheel/velocity", yaw_velocity_);
+        register_input(get_parameter("control_error").as_string(), yaw_angle_error_);
+        register_input(get_parameter("velocity").as_string(), yaw_velocity_);
 
-        register_output("/chassis/lift/left_front_wheel/expect_velocity", yaw_expect_velocity_);
-        register_output("/chassis/lift/left_front_wheel/expect_acceleration", yaw_expect_acceleration_);
+        register_output(get_parameter("yaw_expect_velocity_").as_string(), yaw_expect_velocity_);
+        register_output(get_parameter("yaw_expect_acceleration_").as_string(), yaw_expect_acceleration_);
     }
 
     void update() override {

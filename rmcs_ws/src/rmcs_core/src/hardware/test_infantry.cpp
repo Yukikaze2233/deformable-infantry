@@ -32,8 +32,8 @@ public:
         for (auto& motor : chassis_lift_motors_)
             motor.configure(device::DjiMotor::Config{device::DjiMotor::Type::M3508}
                                 .set_reversed()
-                                .set_reduction_ratio(13.));
-        
+                                .set_reduction_ratio(1.0));
+
         using namespace rmcs_description;
 
         chassis_calibrate_subscription_ = create_subscription<std_msgs::msg::Int32>(
