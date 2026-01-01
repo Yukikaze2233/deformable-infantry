@@ -2,6 +2,8 @@
 #define PURE_ADRC_CONTROLLER_H
 
 #include <cmath>
+#include <limits>
+#include <rclcpp/logging.hpp>
 
 namespace rmcs_core::controller::adrc{
 
@@ -60,11 +62,12 @@ public:
         return nlsef();
     }
 
-    double update(double theta_cmd_rad, double theta_meas_rad, double u_prev_rad){
+    double update(double theta_cmd_rad, double theta_meas_rad, double u_prev_rad){//target ,measurement ,last_u
         td_update(theta_cmd_rad);
         eso_update(theta_meas_rad, u_prev_rad);
         return nlsef();
     }
+    
 
 private:
     void td_update(double v_cmd) {
@@ -79,21 +82,23 @@ private:
         double e = z1_ - theta_meas;
         z1_ += h * (z2_ - beta01_ * e); 
         z2_ += h * (z3_ + b0_ * u - beta02_ * fal(e, 0.5, delta_)); 
-        z3_ += h * (-beta03_ * fal(e, 0.2, delta_)); 
+        z3_ += h * (-beta03_ * fal(e, 0.6, delta_)); 
     }
 
     double nlsef() const {
         double e1 = v1_ - z1_; 
         double e2 = v2_ - z2_; 
         double u0 = kp_ * fal(e1, alpha1_, delta_) + kd_ * fal(e2, alpha2_, delta_);
+        
+        //RCLCPP_INFO(rclcpp::get_logger("rmcs_core::controller::adrc::ADRCController"),"e1=%.2f, v1_=%.2f, z1_=%.2f, z3_=%.2f, output=%.2f",
+        // v1_ - z1_,  // 跟踪误差（核心）
+        // v1_,            // TD跟踪值（指令跟踪）
+        // z1_,            // ESO观测值（状态跟踪）
+        // z3_,            // ESO扰动观测值（关键：跳变根源）
+        // (u0 - z3_) / b0_);
         return (u0 - z3_) / b0_;
     }
 
-    double nlsef_link() const {
-        double e1 = v1_ - z1_; 
-        double u0 = e1 * r_ + z2_ * std::pow(r_, 0.5) * 2;
-        return (u0 - z3_) / b0_;
-    }
 
     static double fst(double e, double ed, double r, double h) {
         double d = r * pow(h, 2);
@@ -111,7 +116,7 @@ private:
     }
 
     void init_default_params() {
-        r_ = 5.0;          
+        r_ = 250000.0;          
         b0_ = 1.0;          
         beta01_ = 100.0;    
         beta02_ = 20.0;     
@@ -119,8 +124,8 @@ private:
         alpha1_ = 0.5;     
         alpha2_ = 0.2;      
         delta_ = 0.01;      
-        kp_ = 20.0;         
-        kd_ = 5.0;          
+        kp_ = 5.0;         
+        kd_ = 1.0;          
     }
 
     double r_, b0_, beta01_, beta02_, beta03_;
@@ -134,6 +139,9 @@ private:
     static constexpr double inf = std::numeric_limits<double>::infinity();
 };
 
+} // namespace rmcs_core::controller::adrc
+
 #endif // PURE_ADRC_CONTROLLER_H
 
-}
+
+

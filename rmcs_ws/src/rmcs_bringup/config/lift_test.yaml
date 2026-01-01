@@ -15,7 +15,7 @@ lift_test:
     Rod_relative_horizontal_coordinate: -9.5
     Rod_relative_longitudinal_coordinate: 90.0
     Rod_length: 100.0
-    Load: 16.06153
+    # Load: 16.06153
 
 
 #An example
@@ -25,7 +25,7 @@ lift_test:
 #     target: /chassis/lift/target_angle
 #     control: /chassis/lift/left_front_wheel/control_torque
 #     kt: 1.0 #转矩参数
-#     wc: 5.0 #w_c * w_c w_c为控制器带宽
+#     wc: 500.0 #w_c * w_c w_c为控制器带宽
 #     b0: 1.0
 #     w0: 167.0 #w_0为观测器带宽
 #     alpha1: 0.5
