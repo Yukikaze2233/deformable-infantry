@@ -13,7 +13,7 @@
 #include <limits>
 
 #include "std_msgs/msg/int32.hpp"
-#include "controller/adrc/adrc_calculator.hpp" 
+#include "controller/adrc/adrc_link_calculator.hpp" 
 
 namespace rmcs_core::virtue::chassis {
 
@@ -37,7 +37,7 @@ public:
 
 
 
-        wheel_adrcs.set_params(100.0, 1.0, 33.0, 0.5, 0.2, 0.01, 15.0, 1.5);
+        wheel_adrcs.set_params(500.0, 1.0, 167.0, /*0.5, 0.2, 0.01,*/ 0.39408, 65.507);
 
         init_displacement();
     }
@@ -48,7 +48,7 @@ public:
         s_lf = speed_simulate(torque_simulate(test_torque_));
 
         double s_lf_error = target_s - s_lf;
-        double lf_adrc_output = wheel_adrcs.compute_adrc_output(target_s, s_lf, last_u);
+        double lf_adrc_output = wheel_adrcs.compute_adrc_output(target_s, s_lf);
         last_u = lf_adrc_output;
         double lf_torque = lf_adrc_output;
         // RCLCPP_INFO(get_logger(),"s_lf:%f",s_lf);   
@@ -65,11 +65,11 @@ private:
         if((torque > 0) && (torque < 0.4)){
             return 0;
         }else if(torque >= 0.4) {
-            return torque - double_dist1(engine);
+            return torque - 0.2;//double_dist1(engine);
         }else if((torque < 0) && (torque > -0.4)){
             return 0;
         }else{
-            return torque + double_dist1(engine);
+            return torque + 0.2;
         }
     }
 
@@ -112,7 +112,7 @@ private:
     std::uniform_real_distribution<double> double_dist1{0.04, 0.2};
  
 
-    controller::adrc::ADRCController wheel_adrcs;
+    controller::adrc::LinkADRCController wheel_adrcs;
 
     const double min_angle_ = 15.0;
     const double max_angle_ = 55.0;
