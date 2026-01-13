@@ -6,7 +6,6 @@
 #include <rmcs_msgs/keyboard.hpp>
 #include <rmcs_msgs/mouse.hpp>
 #include <rmcs_msgs/switch.hpp>
-#include <rmcs_msgs/shoot_mode.hpp>
 
 #include "controller/pid/pid_calculator.hpp"
 
@@ -33,48 +32,14 @@ public:
         register_input("/remote/keyboard", keyboard_);
         register_input("/remote/rotary_knob", rotary_knob_);
 
-        bool is_dual_yaw;
-        if (get_parameter("is_dual_yaw", is_dual_yaw) && is_dual_yaw) {
-            auto gimbal_yaw_motors = get_parameter("gimbal_yaw_motors").as_string_array();
-            if (gimbal_yaw_motors.size() == 0)
-                throw std::runtime_error("Empty array error: 'gimbal_yaw_motors' cannot be empty!");
-
-            size_t gimbal_yaw_motors_counts = gimbal_yaw_motors.size();
-            register_input(
-                gimbal_yaw_motors[gimbal_yaw_motors_counts - 1] + "/angle", gimbal_yaw_angle_);
-            register_input(
-                gimbal_yaw_motors[gimbal_yaw_motors_counts - 1] + "/control_angle_error",
-                gimbal_yaw_angle_error_);
-        } else {
-            register_input("/gimbal/yaw/angle", gimbal_yaw_angle_, false);
-            register_input("/gimbal/yaw/control_angle_error", gimbal_yaw_angle_error_, false);
-        }
-
-        register_input("/chassis/supercap/voltage", supercap_voltage_, false);
-        register_input("/chassis/supercap/enabled", supercap_enabled_, false);
-
-        register_input("/referee/chassis/power_limit", chassis_power_limit_referee_, false);
-        register_input("/referee/chassis/buffer_energy", chassis_buffer_energy_referee_, false);
+        register_input("/gimbal/yaw/angle", gimbal_yaw_angle_, false);
+        register_input("/gimbal/yaw/control_angle_error", gimbal_yaw_angle_error_, false);
 
         register_output("/chassis/angle", chassis_angle_, nan);
         register_output("/chassis/control_angle", chassis_control_angle_, nan);
 
         register_output("/chassis/control_mode", mode_);
         register_output("/chassis/control_velocity", chassis_control_velocity_);
-
-        register_output("/chassis/supercap/control_enable", supercap_control_enabled_, false);
-        register_output("/chassis/supercap/charge_power_limit", supercap_charge_power_limit_, 0.0);
-        register_output("/chassis/control_power_limit", chassis_control_power_limit_, 0.0);
-
-        register_output(
-            "/chassis/supercap/voltage/control_line", supercap_voltage_control_line_,
-            supercap_voltage_control_line);
-        register_output(
-            "/chassis/supercap/voltage/base_line", supercap_voltage_base_line_,
-            supercap_voltage_base_line);
-        register_output(
-            "/chassis/supercap/voltage/dead_line", supercap_voltage_dead_line_,
-            supercap_voltage_dead_line);
     }
 
     void before_updating() override {
@@ -86,33 +51,6 @@ public:
             gimbal_yaw_angle_error_.make_and_bind_directly(0.0);
             RCLCPP_WARN(
                 get_logger(), "Failed to fetch \"/gimbal/yaw/control_angle_error\". Set to 0.0.");
-        }
-
-        bool supercap_free = false;
-        if (!supercap_voltage_.ready()) {
-            supercap_voltage_.make_and_bind_directly(0.0);
-            supercap_free = true;
-        }
-        if (!supercap_enabled_.ready()) {
-            supercap_enabled_.make_and_bind_directly(false);
-            supercap_free = true;
-        }
-        if (supercap_free)
-            RCLCPP_INFO(get_logger(), "Works in supercap-free mode.");
-
-        if (!chassis_power_limit_referee_.ready()) {
-            chassis_power_limit_referee_.make_and_bind_directly(safe_chassis_power_limit);
-            RCLCPP_WARN(
-                get_logger(),
-                "Failed to fetch \"/referee/chassis/power_limit\". Set to safe value %.1f.",
-                safe_chassis_power_limit);
-        }
-        if (!chassis_buffer_energy_referee_.ready()) {
-            chassis_buffer_energy_referee_.make_and_bind_directly(buffer_energy_base_line);
-            RCLCPP_WARN(
-                get_logger(),
-                "Failed to fetch \"/referee/chassis/buffer_energy\". Set to safe value %.1f.",
-                buffer_energy_base_line);
         }
     }
 
@@ -159,7 +97,6 @@ public:
             }
 
             update_velocity_control();
-            update_power_limit_control();
         } while (false);
         // RCLCPP_INFO(rclcpp::get_logger("a"), "%d", *supercap_control_enabled_ );
         // RCLCPP_INFO(rclcpp::get_logger("b"), "%d", *supercap_enabled_);
@@ -172,10 +109,6 @@ public:
         *mode_ = rmcs_msgs::ChassisMode::AUTO;
 
         *chassis_control_velocity_ = {nan, nan, nan};
-
-        *supercap_control_enabled_    = false;
-        *supercap_charge_power_limit_ = 0.0;
-        *chassis_control_power_limit_ = 0.0;
     }
 
     void update_velocity_control() {
@@ -189,7 +122,8 @@ public:
         auto keyboard = *keyboard_;
         Eigen::Vector2d keyboard_move{keyboard.w - keyboard.s, keyboard.a - keyboard.d};
 
-        Eigen::Vector2d translational_velocity = *joystick_right_ + keyboard_move;
+        Eigen::Vector2d translational_velocity =
+            Eigen::Rotation2Dd{*gimbal_yaw_angle_} * (*joystick_right_ + keyboard_move);
 
         if (translational_velocity.norm() > 1.0)
             translational_velocity.normalize();
@@ -263,55 +197,6 @@ public:
         return err;
     }
 
-    void update_power_limit_control() {
-        if (!supercap_switch_cooling_) {
-            bool enable = keyboard_->shift || *rotary_knob_ < -0.9;
-            if (*supercap_control_enabled_ != enable) {
-                *supercap_control_enabled_ = enable;
-                supercap_switch_cooling_   = 500;
-            }
-        } else {
-            --supercap_switch_cooling_;
-        }
-
-        if (*chassis_power_limit_referee_ == inf) {
-            *chassis_control_power_limit_ = inf;
-            return;
-        }
-
-        double power_limit_after_buffer_energy_closed_loop =
-            *chassis_power_limit_referee_
-                * std::clamp(
-                    (*chassis_buffer_energy_referee_ - buffer_energy_dead_line)
-                        / (buffer_energy_base_line - buffer_energy_dead_line),
-                    0.0, 1.0)
-            + excess_power_limit
-                  * std::clamp(
-                      (*chassis_buffer_energy_referee_ - buffer_energy_base_line)
-                          / (buffer_energy_control_line - buffer_energy_base_line),
-                      0.0, 1.0);
-        *supercap_charge_power_limit_ = power_limit_after_buffer_energy_closed_loop - 3;
-
-        if (*supercap_control_enabled_ && *supercap_enabled_) {
-            double supercap_power_limit = *mode_ == rmcs_msgs::ChassisMode::LAUNCH_RAMP
-                                            ? 250.0
-                                            : *chassis_power_limit_referee_ + 80.0;
-            *chassis_control_power_limit_ =
-                *chassis_power_limit_referee_
-                    * std::clamp(
-                        (*supercap_voltage_ - supercap_voltage_dead_line)
-                            / (supercap_voltage_base_line - supercap_voltage_dead_line),
-                        0.0, 1.0)
-                + (supercap_power_limit - *chassis_power_limit_referee_)
-                      * std::clamp(
-                          (*supercap_voltage_ - supercap_voltage_base_line)
-                              / (supercap_voltage_control_line - supercap_voltage_base_line),
-                          0.0, 1.0);
-        } else {
-            *chassis_control_power_limit_ = power_limit_after_buffer_energy_closed_loop;
-        }
-    }
-
 private:
     static constexpr double inf = std::numeric_limits<double>::infinity();
     static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -319,22 +204,6 @@ private:
     // Maximum control velocities
     static constexpr double translational_velocity_max = 10.0;
     static constexpr double angular_velocity_max       = 10.0;
-
-    // Maximum excess power when buffer energy is sufficient.
-    static constexpr double excess_power_limit = 35;
-
-    //               power_limit_after_buffer_energy_closed_loop =
-    static constexpr double buffer_energy_control_line = 120; // = referee + excess
-    static constexpr double buffer_energy_base_line    = 50;  // = referee
-    static constexpr double buffer_energy_dead_line    = 0;   // = 0
-
-    //                                         chassis_control_power =
-    static constexpr double supercap_voltage_control_line = 13.5; // = supercap
-    static constexpr double supercap_voltage_base_line    = 11.5; // = referee
-    static constexpr double supercap_voltage_dead_line    = 10.5; // = 0
-
-    // Minimum chassis power limit (Infantry, Health prioritized at level 1)
-    static constexpr double safe_chassis_power_limit = 45;
 
     InputInterface<Eigen::Vector2d> joystick_right_;
     InputInterface<Eigen::Vector2d> joystick_left_;
@@ -356,23 +225,7 @@ private:
     bool spinning_forward_ = true;
     pid::PidCalculator following_velocity_controller_;
 
-    OutputInterface<rmcs_description::YawLink::DirectionVector> chassis_control_velocity_;
-
-    InputInterface<double> supercap_voltage_;
-    InputInterface<bool> supercap_enabled_;
-
-    InputInterface<double> chassis_power_limit_referee_;
-    InputInterface<double> chassis_buffer_energy_referee_;
-
-    int supercap_switch_cooling_ = 0;
-    OutputInterface<bool> supercap_control_enabled_;
-    OutputInterface<double> supercap_charge_power_limit_;
-
-    OutputInterface<double> chassis_control_power_limit_;
-
-    OutputInterface<double> supercap_voltage_control_line_;
-    OutputInterface<double> supercap_voltage_base_line_;
-    OutputInterface<double> supercap_voltage_dead_line_;
+    OutputInterface<rmcs_description::BaseLink::DirectionVector> chassis_control_velocity_;
 };
 
 } // namespace rmcs_core::controller::chassis

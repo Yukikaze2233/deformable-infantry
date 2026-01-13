@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim wget curl unzip \
     zsh screen tmux \
     usbutils net-tools iputils-ping \
-    ripgrep htop fzf \
     libusb-1.0-0-dev \
     libeigen3-dev \
     libopencv-dev \
@@ -122,8 +121,14 @@ USER ubuntu
 RUN sh -c "$(wget https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -O -)" && \
     sed -i 's/ZSH_THEME=\"[a-z0-9\-]*\"/ZSH_THEME="af-magic"/g' ~/.zshrc && \
     echo 'source ~/env_setup.zsh' >> ~/.zshrc && \
-    echo 'export PATH="${PATH}:/opt/nvim-linux-x86_64/bin"' >> ~/.zshrc && \
+    echo 'export PATH="$PATH:/opt/nvim-linux-x86_64/bin"' >> ~/.zshrc && \
     echo 'export PATH=${PATH}:/workspaces/RMCS/.script' >> ~/.zshrc
+
+# Install latest neovim
+RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz && \
+    sudo rm -rf /opt/nvim && \
+    sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz && \
+    rm nvim-linux-x86_64.tar.gz
 
 # Copy environment setup scripts
 COPY --chown=1000:1000 .script/template/env_setup.bash env_setup.bash

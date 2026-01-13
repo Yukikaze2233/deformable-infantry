@@ -39,6 +39,7 @@ public:
         *velocity_ = velocity();
         *torque_   = torque();
         *encoder_angle_ = encoder_angle();
+        
     }
 
     double control_torque() const {
