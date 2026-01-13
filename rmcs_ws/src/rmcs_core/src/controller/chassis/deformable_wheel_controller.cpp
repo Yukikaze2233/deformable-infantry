@@ -547,15 +547,15 @@ private:
     void update_control_torques(
         const Eigen::Vector4d& steering_torques, const Eigen::Vector4d& wheel_torques) {
 
-        *left_front_steering_control_torque_ = steering_torques[0];
-        *left_back_steering_control_torque_  = steering_torques[1];
-        *right_back_steering_control_torque_ = steering_torques[2];
-        *right_front_steering_control_torque_ = steering_torques[3];
+        *left_front_steering_control_torque_ = 0.0/*steering_torques[0]*/;
+        *left_back_steering_control_torque_  = 0.0/*steering_torques[1]*/;
+        *right_back_steering_control_torque_ = 0.0/*steering_torques[2]*/;
+        *right_front_steering_control_torque_ = 0.0/*steering_torques[3]*/;
 
-        *left_front_wheel_control_torque_ = wheel_torques[0];
-        *left_back_wheel_control_torque_  = wheel_torques[1];
-        *right_back_wheel_control_torque_ = wheel_torques[2];
-        *right_front_wheel_control_torque_ = wheel_torques[3];
+        *left_front_wheel_control_torque_ = 0.0/*wheel_torques[0]*/;
+        *left_back_wheel_control_torque_  = 0.0/*wheel_torques[1]*/;
+        *right_back_wheel_control_torque_ = 0.0/*wheel_torques[2]*/;
+        *right_front_wheel_control_torque_ = 0.0/*wheel_torques[3]*/;
     }
 
     void update_chassis_velocity_expected(const Eigen::Vector3d& chassis_acceleration) {

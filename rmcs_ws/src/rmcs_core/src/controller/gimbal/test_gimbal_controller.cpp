@@ -18,7 +18,7 @@ public:
         // threshold_ = get_parameter("threshold").as_double();
         register_input("/remote/switch/right", switch_right_);
         register_input("/gimbal/yaw/velocity", yaw_velocity_);
-        register_input("/gimbal/yaw/target_velocity", yaw_target_velocity_);
+        // register_input("/gimbal/yaw/target_velocity", yaw_target_velocity_);
 
         register_output("/gimbal/yaw/velocity_error", yaw_velocity_error, 0.0);
         register_output("/gimbal/yaw/controller_torque", yaw_control_torque_, 0.0);
