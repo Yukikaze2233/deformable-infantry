@@ -22,6 +22,7 @@ rmcs_executor:
       # - rmcs_core::controller::pid::ErrorPidController -> yaw_target_velocity_pid_calculate
       # - rmcs_core::controller::pid::ErrorPidController -> yaw_torque_pid_controller
       # - rmcs_core::controller::pid::ErrorPidController -> pitch_torque_pid_controller
+      # - rmcs_core::controller::gimbal::GimbalFeedforward -> yaw_feedforward
       - rmcs_core::controller::pid::ErrorPidController -> yaw_angle_pid_controller
       - rmcs_core::controller::pid::ErrorPidController -> pitch_angle_pid_controller
 
@@ -84,14 +85,14 @@ gimbal_calculate:
 #   ros__parameters:
 #     measurement: /gimbal/yaw/control_angle_error
 #     control: /gimbal/yaw/target_velocity
-#     kp: 16.0
+#     kp: 0.6
 #     ki: 0.0
 #     kd: 0.0
 
 # yaw_torque_pid_controller:
 #   ros__parameters:
 #     measurement: /gimbal/yaw/velocity_error
-#     control: /gimbal/yaw/control_torque
+#     control: /gimbal/yaw/control_nonfeedforward
 #     kp: 0.1
 #     ki: 0.0
 #     kd: 0.0
@@ -103,6 +104,18 @@ gimbal_calculate:
 #     kp: 0.1
 #     ki: 0.0
 #     kd: 0.0
+
+# yaw_feedforward:
+#   ros__parameters:
+#     target_velocity: /gimbal/yaw/target_velocity
+#     target_angle: /gimbal/yaw/target_angle
+#     control_nonfeedforward: /gimbal/yaw/control_torque_nonfeedforward
+#     control: /gimbal/yaw/control_torque
+#     kv: 0.0
+#     ka: 0.0
+#     firc: 0.0
+#     order: 2.0
+
 #以上是双环PID，不能和下面单环PID同时使用
 
 yaw_angle_pid_controller:

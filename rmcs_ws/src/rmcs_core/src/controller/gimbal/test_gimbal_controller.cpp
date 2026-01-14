@@ -28,12 +28,12 @@ public:
 
     void update() override {
         // *yaw_velocity_error = *yaw_target_velocity_ - *yaw_velocity_;
-        T += 0.001;
         auto switch_right = *switch_right_;
         if(switch_right == rmcs_msgs::Switch::UP){
-            if(std::abs(*yaw_velocity_) > threshold_) {
+            if(std::abs(*yaw_velocity_) > velocity_threshold_) {
                 *yaw_control_torque_ += 0.0;
             }else{
+                T += 0.001;
                 *yaw_control_torque_ = T * 0.1;
             } 
         }
@@ -44,7 +44,7 @@ private:
     static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
 
     InputInterface<rmcs_msgs::Switch> switch_right_;
-    double threshold_ = 1.0;
+    double velocity_threshold_ = 0.04;
     double T =0.0;
     std::string csv_name1 = "yaw_velocity";
     std::string csv_name2 = "yaw_target_velocity";
