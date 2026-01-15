@@ -81,18 +81,24 @@ gimbal_calculate:
     upper_limit: -0.39518
     lower_limit: 0.36
 
+
+# gimbal_calculate:
+#   ros__parameters:
+#     upper_limit: -0.39518
+#     lower_limit: 0.36
+
 # yaw_target_velocity_pid_calculate:
 #   ros__parameters:
 #     measurement: /gimbal/yaw/control_angle_error
 #     control: /gimbal/yaw/target_velocity
-#     kp: 0.6
+#     kp: 16.0
 #     ki: 0.0
 #     kd: 0.0
 
 # yaw_torque_pid_controller:
 #   ros__parameters:
 #     measurement: /gimbal/yaw/velocity_error
-#     control: /gimbal/yaw/control_nonfeedforward
+#     control: /gimbal/yaw/control_torque
 #     kp: 0.1
 #     ki: 0.0
 #     kd: 0.0
@@ -104,19 +110,7 @@ gimbal_calculate:
 #     kp: 0.1
 #     ki: 0.0
 #     kd: 0.0
-
-# yaw_feedforward:
-#   ros__parameters:
-#     target_velocity: /gimbal/yaw/target_velocity
-#     target_angle: /gimbal/yaw/target_angle
-#     control_nonfeedforward: /gimbal/yaw/control_torque_nonfeedforward
-#     control: /gimbal/yaw/control_torque
-#     kv: 0.0
-#     ka: 0.0
-#     firc: 0.0
-#     order: 2.0
-
-#以上是双环PID，不能和下面单环PID同时使用
+# 以上是双环PID，不能和下面单环PID同时使用
 
 yaw_angle_pid_controller:
   ros__parameters:
