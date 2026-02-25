@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
 #include <limits>
 #include <numbers>
 
@@ -59,8 +58,6 @@ public:
         register_input("/chassis/right_front_joint/encoder_angle", right_front_joint_angle_);
         register_input("/chassis/right_back_joint/encoder_angle", right_back_joint_angle_);
 
-        register_input("/gimbal/scope/velocity", scope_motor_velocity);
-
         register_output("/chassis/angle", chassis_angle_, nan_);
         register_output("/chassis/control_angle", chassis_control_angle_, nan_);
 
@@ -73,7 +70,7 @@ public:
         register_output("/chassis/right_back_joint/control_angle_error", rb_angle_error_, nan_);
 
         register_output("/chassis/processed_encoder/angle", processed_encoder_angle_, nan_);
-        register_output("/gimbal/scope/control_torque", scope_motor_control_torque);
+        *processed_encoder_angle_ = nan_;
 
         *mode_ = rmcs_msgs::ChassisMode::AUTO;
         chassis_control_velocity_->vector << nan_, nan_, nan_;
@@ -177,7 +174,6 @@ private:
         *rb_angle_error_ = nan_;
 
         *processed_encoder_angle_ = nan_;
-        RCLCPP_INFO(get_logger(), "%f", *scope_motor_velocity);
     }
 
     void update_velocity_control() {
@@ -209,7 +205,7 @@ private:
 
         case rmcs_msgs::ChassisMode::SPIN: {
             angular_velocity =
-                0.0 * (spinning_forward_ ? angular_velocity_max_ : -angular_velocity_max_);     // 0.0 for test
+                0.6 * (spinning_forward_ ? angular_velocity_max_ : -angular_velocity_max_);
         } break;
 
         case rmcs_msgs::ChassisMode::STEP_DOWN: {
@@ -268,7 +264,6 @@ private:
         if (toggle_condition && !last_toggle_condition) {
             current_target_angle_ =
                 (std::abs(current_target_angle_ - max_angle_) < 1e-6) ? min_angle_ : max_angle_;
-                scope_motor_control();
         }
     }
 
@@ -284,33 +279,22 @@ private:
         const double alpha_rb =
             wrap_deg(right_back_joint_offset_) - wrap_deg(*right_back_joint_angle_) + 61.0;
 
-        // *processed_encoder_angle_ = (alpha_lb + alpha_lf + alpha_rf + alpha_rb) / 4.0;
-        *processed_encoder_angle_ = (alpha_lb + alpha_rb) / 2.0;
+        *processed_encoder_angle_ = (alpha_lb + alpha_lf + alpha_rf + alpha_rb) / 4.0;
 
         s_lf_ = trapezoidal_calculator(alpha_lf);
         s_lb_ = trapezoidal_calculator(alpha_lb);
         s_rf_ = trapezoidal_calculator(alpha_rf);
         s_rb_ = trapezoidal_calculator(alpha_rb);
 
+        RCLCPP_INFO(get_logger(), "1:%f", alpha_lf);
+        RCLCPP_INFO(get_logger(), "2:%f", alpha_lb);
+        RCLCPP_INFO(get_logger(), "3:%f", alpha_rb);
+        RCLCPP_INFO(get_logger(), "4:%f", alpha_rf);
+
         *lf_angle_error_ = s_lf_ - s_target_;
         *lb_angle_error_ = s_lb_ - s_target_;
         *rf_angle_error_ = s_rf_ - s_target_;
         *rb_angle_error_ = s_rb_ - s_target_;
-    }
-
-    void scope_motor_control() {
-        if (current_target_angle_ == min_angle_){
-            *scope_motor_control_torque = -0.3;
-            // if (*scope_motor_velocity <= std::abs(0.1)){
-            //     *scope_motor_control_torque = 0.18 * 1.0 / 36.0;
-            // }
-        }
-        else{
-            *scope_motor_control_torque = 0.3;
-            // if (*scope_motor_velocity <= std::abs(0.1)){
-            //     *scope_motor_control_torque = -0.18 * 1.0 / 36.0;
-            // }
-        }
     }
 
     double trapezoidal_calculator(double alpha_deg) const {
@@ -351,16 +335,12 @@ private:
     InputInterface<double> right_front_joint_angle_;
     InputInterface<double> right_back_joint_angle_;
 
-    InputInterface<double> scope_motor_velocity;
- 
     OutputInterface<double> lf_angle_error_;
     OutputInterface<double> lb_angle_error_;
     OutputInterface<double> rf_angle_error_;
     OutputInterface<double> rb_angle_error_;
 
     OutputInterface<double> processed_encoder_angle_;
-
-    OutputInterface<double> scope_motor_control_torque;
 
     double min_angle_;
     double max_angle_;
@@ -369,7 +349,7 @@ private:
     double right_front_joint_offset_;
     double right_back_joint_offset_;
 
-    double current_target_angle_;
+    double current_target_angle_ = 40.0;
 
     double s_lf_ = 0.0, s_lb_ = 0.0, s_rf_ = 0.0, s_rb_ = 0.0;
     double s_target_ = 0.0;

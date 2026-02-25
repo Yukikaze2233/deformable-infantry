@@ -17,7 +17,16 @@
   <class type = "rmcs_core::hardware::TunnelInfantry" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
-  <class type="rmcs_core::hardware::DeformableInfantry" base_class_type="rmcs_executor::Component">
+  <class type = "rmcs_core::hardware::TestInfantry" base_class_type="rmcs_executor::Component">
+    <description>Test plugin.</description>
+  </class>
+  <class type = "rmcs_core::controller::chassis::ChassisLiftController" base_class_type="rmcs_executor::Component">
+  <description>Test plugin.</description>
+  </class>
+  <class type = "rmcs_core::hardware::DeformableInfantry" base_class_type="rmcs_executor::Component">
+    <description>Test plugin.</description>
+  </class>
+  <class type = "rmcs_core::hardware::DeformableInfantry" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::controller::chassis::ChassisController" base_class_type="rmcs_executor::Component">
@@ -27,6 +36,9 @@
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::controller::chassis::OmniWheelController" base_class_type="rmcs_executor::Component">
+    <description>Test plugin.</description>
+  </class>
+  <class type="rmcs_core::controller::chassis::ZeroPointGet" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::controller::chassis::ChassisTestController" base_class_type="rmcs_executor::Component">
@@ -51,6 +63,9 @@
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::controller::gimbal::SimpleYawController" base_class_type="rmcs_executor::Component">
+    <description>Test plugin.</description>
+  </class>
+  <class type="rmcs_core::controller::gimbal::TestYawController" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::controller::gimbal::DeformableInfantryGimbalController" base_class_type="rmcs_executor::Component">
@@ -120,6 +135,9 @@
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::referee::app::ui::Hero" base_class_type="rmcs_executor::Component">
+    <description>Test plugin.</description>
+  </class>
+  <class type="rmcs_core::virtue::chassis::ChassisLiftController" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
 </library>

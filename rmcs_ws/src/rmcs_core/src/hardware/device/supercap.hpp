@@ -1,21 +1,10 @@
 #pragma once
 
-#include <algorithm>
-#include <atomic>
-#include <bit>
 #include <cmath>
-#include <concepts>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <limits>
-#include <span>
 
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <rmcs_executor/component.hpp>
-
-#include "hardware/device/can_packet.hpp"
 
 namespace rmcs_core::hardware::device {
 using rmcs_executor::Component;
@@ -33,44 +22,51 @@ public:
             "/chassis/supercap/charge_power_limit", supercap_charge_power_limit_);
     }
 
-    void store_status(std::span<const std::byte> can_data) {
-        can_data_.store(CanPacket8{can_data}, std::memory_order_relaxed);
+    void store_status(uint64_t can_data) {
+
+        //   RCLCPP_INFO(rclcpp::get_logger("a"), "%lf", *chassis_power_ );
+        //  RCLCPP_INFO(rclcpp::get_logger("b"), "%d", *supercap_enabled_);
+        can_data_.store(std::bit_cast<SupercapStatus>(can_data), std::memory_order::relaxed);
     }
 
     void update_status() {
-        auto status = std::bit_cast<SupercapStatus>(can_data_.load(std::memory_order::relaxed));
+        auto status = can_data_.load(std::memory_order::relaxed);
 
-        *chassis_power_ = uint_to_double(status.chassis_power, -100.0, 400.0);
-        *chassis_voltage_ = uint_to_double(status.chassis_voltage, 0.0, 50.0);
+        *chassis_power_    = uint_to_double(status.chassis_power, -100.0, 400.0);
+        *chassis_voltage_  = uint_to_double(status.chassis_voltage, 0.0, 50.0);
         *supercap_voltage_ = uint_to_double(status.supercap_voltage, 0.0, 50.0);
         *supercap_enabled_ = status.enabled;
     }
 
-    CanPacket8::Quarter generate_command() const {
+    uint16_t generate_command() const {
         SupercapCommand command;
 
         command.enabled = *chassis_output_status_;
 
-        const double power_limit = *supercap_charge_power_limit_;
+        double power_limit = *supercap_charge_power_limit_;
+        //  RCLCPP_INFO(rclcpp::get_logger("a"), "%lf", power_limit );
+        // RCLCPP_INFO(rclcpp::get_logger("b"), "%d", *chassis_output_status_);
+
+        // RCLCPP_INFO(rclcpp::get_logger("a"), "%d", *supercap_enabled_);
         if (std::isnan(power_limit))
             command.power_limit = 0;
         else
             command.power_limit = static_cast<uint8_t>(std::clamp(power_limit, 0.0, 255.0));
 
-        return std::bit_cast<CanPacket8::Quarter>(command);
+        return std::bit_cast<uint16_t>(command);
     }
 
-    CanPacket8::Quarter generate_disable_command() const {
+    uint16_t generate_disable_command() const {
         SupercapCommand command;
 
-        command.enabled = false;
-        const double power_limit = *supercap_charge_power_limit_;
+        command.enabled    = false;
+        double power_limit = *supercap_charge_power_limit_;
         if (std::isnan(power_limit))
             command.power_limit = 0;
         else
             command.power_limit = static_cast<uint8_t>(std::clamp(power_limit, 0.0, 255.0));
 
-        return std::bit_cast<CanPacket8::Quarter>(command);
+        return std::bit_cast<uint16_t>(command);
     }
 
     double chassis_power() { return *chassis_power_; }
@@ -81,11 +77,9 @@ public:
 private:
     static constexpr double
         uint_to_double(std::unsigned_integral auto value, double min, double max) {
-        const double span = max - min;
-        const double offset = min;
-        return (static_cast<double>(value)
-                / static_cast<double>(std::numeric_limits<decltype(value)>::max()) * span)
-             + offset;
+        double span   = max - min;
+        double offset = min;
+        return (double)value / (double)decltype(value)(-1) * span + offset;
     }
 
     struct __attribute__((packed, aligned(8))) SupercapStatus {
@@ -95,7 +89,7 @@ private:
         uint8_t enabled;
         uint8_t unused;
     };
-    std::atomic<CanPacket8> can_data_;
+    std::atomic<SupercapStatus> can_data_{};
     static_assert(decltype(can_data_)::is_always_lock_free);
 
     struct __attribute__((packed, aligned(2))) SupercapCommand {

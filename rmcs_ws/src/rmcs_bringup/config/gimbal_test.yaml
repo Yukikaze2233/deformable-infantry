@@ -17,14 +17,14 @@ rmcs_executor:
       - rmcs_core::controller::smc::Smc_Observer -> smc_observer2
       - rmcs_core::controller::smc::Smc_Observer -> smc_observer3
 
-      - rmcs_core::controller::gimbal::DeformableInfantryGimbalController -> gimbal_calculate
+      # - rmcs_core::controller::gimbal::DeformableInfantryGimbalController -> gimbal_calculate
+      - rmcs_core::controller::gimbal::TestYawController -> gimbal_controller
       # - rmcs_core::controller::gimbal::SimpleYawController -> gimbal_controller
       # - rmcs_core::controller::pid::ErrorPidController -> yaw_target_velocity_pid_calculate
       # - rmcs_core::controller::pid::ErrorPidController -> yaw_torque_pid_controller
       # - rmcs_core::controller::pid::ErrorPidController -> pitch_torque_pid_controller
-      # - rmcs_core::controller::gimbal::GimbalFeedforward -> yaw_feedforward
-      - rmcs_core::controller::pid::ErrorPidController -> yaw_angle_pid_controller
-      - rmcs_core::controller::pid::ErrorPidController -> pitch_angle_pid_controller
+      # - rmcs_core::controller::pid::ErrorPidController -> yaw_angle_pid_controller
+      # - rmcs_core::controller::pid::ErrorPidController -> pitch_angle_pid_controller
 
       - rmcs_core::controller::shooting::FrictionWheelController -> friction_wheel_controller
       - rmcs_core::controller::shooting::HeatController -> heat_controller
@@ -42,14 +42,9 @@ rmcs_executor:
 value_broadcaster:
   ros__parameters:
     forward_list:
-      - /chassis/left_front_joint/velocity
-      - /chassis/left_back_joint/velocity
-      - /chassis/right_back_joint/velocity
-      - /chassis/right_front_joint/velocity
-      - /chassis/processed_encoder/angle
-      - /chassis/encoder/alpha
-      - /chassis/encoder/alpha_dot
-      - /chassis/radius
+      - /gimbal/yaw/velocity
+      - /gimbal/yaw/torque
+
 
 deformable_infantry:
   ros__parameters:
@@ -76,29 +71,18 @@ chassis_controller:
     Rod_relative_longitudinal_coordinate: 90.0
     Rod_length: 100.0
 
-gimbal_calculate:
-  ros__parameters:
-    upper_limit: -0.39518
-    lower_limit: 0.36
-
-
-# gimbal_calculate:
-#   ros__parameters:
-#     upper_limit: -0.39518
-#     lower_limit: 0.36
-
 # yaw_target_velocity_pid_calculate:
 #   ros__parameters:
 #     measurement: /gimbal/yaw/control_angle_error
 #     control: /gimbal/yaw/target_velocity
-#     kp: 16.0
+#     kp: 0.6
 #     ki: 0.0
 #     kd: 0.0
 
 # yaw_torque_pid_controller:
 #   ros__parameters:
 #     measurement: /gimbal/yaw/velocity_error
-#     control: /gimbal/yaw/control_torque
+#     control: /gimbal/yaw/control_nonfeedforward
 #     kp: 0.1
 #     ki: 0.0
 #     kd: 0.0
@@ -110,23 +94,35 @@ gimbal_calculate:
 #     kp: 0.1
 #     ki: 0.0
 #     kd: 0.0
-# 以上是双环PID，不能和下面单环PID同时使用
 
-yaw_angle_pid_controller:
-  ros__parameters:
-    measurement: /gimbal/yaw/control_angle_error
-    control: /gimbal/yaw/control_velocity
-    kp: 0.0
-    ki: 0.0
-    kd: 0.0
+# yaw_feedforward:
+#   ros__parameters:
+#     target_velocity: /gimbal/yaw/target_velocity
+#     target_angle: /gimbal/yaw/target_angle
+#     control_nonfeedforward: /gimbal/yaw/control_torque_nonfeedforward
+#     control: /gimbal/yaw/control_torque
+#     kv: 0.0
+#     ka: 0.0
+#     firc: 0.0
+#     order: 2.0
 
-pitch_angle_pid_controller:
-  ros__parameters:
-    measurement: /gimbal/pitch/control_angle_error
-    control: /gimbal/pitch/control_velocity
-    kp: 0.0
-    ki: 0.0
-    kd: 0.0
+#以上是双环PID，不能和下面单环PID同时使用
+
+# yaw_angle_pid_controller:
+#   ros__parameters:
+#     measurement: /gimbal/yaw/control_angle_error
+#     control: /gimbal/yaw/control_velocity
+#     kp: 0.0
+#     ki: 0.0
+#     kd: 0.0
+
+# pitch_angle_pid_controller:
+#   ros__parameters:
+#     measurement: /gimbal/pitch/control_angle_error
+#     control: /gimbal/pitch/control_velocity
+#     kp: 0.0
+#     ki: 0.0
+#     kd: 0.0
 
 friction_wheel_controller:
   ros__parameters:

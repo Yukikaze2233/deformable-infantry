@@ -98,7 +98,8 @@ public:
 
             update_velocity_control();
         } while (false);
-
+        // RCLCPP_INFO(rclcpp::get_logger("a"), "%d", *supercap_control_enabled_ );
+        // RCLCPP_INFO(rclcpp::get_logger("b"), "%d", *supercap_enabled_);
         last_switch_right_ = switch_right;
         last_switch_left_  = switch_left;
         last_keyboard_     = keyboard;
@@ -202,7 +203,7 @@ private:
 
     // Maximum control velocities
     static constexpr double translational_velocity_max = 10.0;
-    static constexpr double angular_velocity_max       = 16.0;
+    static constexpr double angular_velocity_max       = 10.0;
 
     InputInterface<Eigen::Vector2d> joystick_right_;
     InputInterface<Eigen::Vector2d> joystick_left_;

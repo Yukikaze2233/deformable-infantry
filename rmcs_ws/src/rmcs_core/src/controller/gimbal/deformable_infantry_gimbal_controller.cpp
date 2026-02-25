@@ -44,7 +44,7 @@ public:
         auto switch_left = *switch_left_;
         auto mouse = *mouse_;
 
-        constexpr double joystick_sensitivity = 0.06;
+        constexpr double joystick_sensitivity = 0.006;
         constexpr double mouse_sensitivity = 0.5;
 
         if ((switch_left == rmcs_msgs::Switch::UNKNOWN || switch_right == rmcs_msgs::Switch::UNKNOWN)
@@ -53,11 +53,11 @@ public:
             *pitch_angle_error_ = nan_;
         }
 
-        else{
+        if (switch_right == rmcs_msgs::Switch::MIDDLE){
             *yaw_angle_error_ =
                 joystick_sensitivity * joystick_left_->y() + mouse_sensitivity * mouse_velocity_->y();
             *pitch_angle_error_ =
-                joystick_sensitivity * joystick_left_->x() - mouse_sensitivity * mouse_velocity_->x();
+                -joystick_sensitivity * joystick_left_->x() - mouse_sensitivity * mouse_velocity_->x();
         }
     }
 

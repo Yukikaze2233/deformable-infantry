@@ -1,0 +1,12 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs_core::virtue::chassis::ChassisLiftController -> lift_test
+
+lift_test:
+  ros__parameters:
+    Initial_length: 56.64
+    Rod_relative_horizontal_coordinate: -9.5
+    Rod_relative_longitudinal_coordinate: 90.0
+    Rod_length: 100.0
