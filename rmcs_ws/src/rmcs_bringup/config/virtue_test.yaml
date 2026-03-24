@@ -2,11 +2,70 @@ rmcs_executor:
   ros__parameters:
     update_rate: 1000.0
     components:
-      - rmcs_core::virtue::chassis::ChassisLiftController -> lift_test
+      - rmcs_core::virtue::chassis::ChassisLiftController -> virtual_chassis_lift_controller
+      - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
 
-lift_test:
+virtual_chassis_lift_controller:
   ros__parameters:
-    Initial_length: 56.64
-    Rod_relative_horizontal_coordinate: -9.5
-    Rod_relative_longitudinal_coordinate: 90.0
-    Rod_length: 100.0
+    # Mechanical limits (deg)
+    physical_min_angle_deg: 15.0
+    physical_max_angle_deg: 55.0
+    initial_angle_deg: 15.0
+
+    # Plant model
+    inertia: 0.04
+    viscous_damping: 0.02
+    reduction_ratio: 36.0
+    gravity_gain: 8.4
+    torque_limit: 28.0
+
+    # Disturbance torque magnitude per cycle
+    disturbance_min: 0.0
+    disturbance_max: 0.0
+
+    # Hard-stop behaviour
+    limit_restitution: 0.0
+    limit_smooth_zone_deg: 3.0
+    limit_inward_torque_scale_min: 1.0
+    limit_approach_damping: 1.2
+    limit_contact_guard_enable: true
+    limit_contact_hold_margin: 0.8
+    limit_release_speed_deg_s: 0.5
+
+    # ADRC
+    adrc_b0: 0.694
+    kt: 1.0
+
+    adrc_td_h: 0.001
+    adrc_td_r: 1.4
+
+    adrc_eso_h: 0.001
+    adrc_eso_w0: 250.0
+    adrc_eso_auto_beta: true
+
+    adrc_nlesf_k1: 30.0
+    adrc_nlesf_k2: 17.0
+    adrc_nlesf_alpha1: 0.75
+    adrc_nlesf_alpha2: 0.7
+    adrc_nlesf_delta: 0.02
+    adrc_nlesf_u_min: -28.0
+    adrc_nlesf_u_max: 28.0
+
+    # Target angle source:
+    # 1) target_mode: yaml  -> read fixed_target_angle_deg from parameter (deg)
+    # 2) target_mode: code  -> code_target_* profile
+    target_mode: yaml
+    fixed_target_angle_deg: 54.5
+
+    code_target_center_deg: 35.0
+    code_target_amplitude_deg: 18.0
+    code_target_period_s: 3.0
+    log_every_n: 100
+
+value_broadcaster:
+  ros__parameters:
+    forward_list:
+      - /test/motor/torque
+      - /test/motor/velocity_rad_s
+      - /test/mechanism/angle_deg
+      - /test/target/angle_deg
