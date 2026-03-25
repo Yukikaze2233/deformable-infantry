@@ -69,3 +69,27 @@ value_broadcaster:
       - /test/motor/velocity_rad_s
       - /test/mechanism/angle_deg
       - /test/target/angle_deg
+
+# This is a example of how to separate the ADRC parameters into a different node if desired.
+# adrc_controller:
+#   ros__parameters:
+#     measurement:
+#     setpoint:
+#     control:
+#     kt: 1.0
+
+#     td_h: 0.001
+#     td_r: 1.4
+
+#     dt: 0.001
+#     b0: 0.694
+#     eso_w0: 250.0
+#     eso_auto_beta: true
+
+#     k1: 30.0
+#     k2: 17.0
+#     alpha1: 0.75
+#     alpha2: 0.7
+#     delta: 0.02
+#     u_min: -28.0
+#     u_max: 28.0
