@@ -107,6 +107,9 @@
   <class type="rmcs_core::controller::adrc::AdrcController" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
+  <class type="rmcs_core::controller::kalman::KalmanFilterController" base_class_type="rmcs_executor::Component">
+    <description>1D kalman filter controller.</description>
+  </class>
   <class type="rmcs_core::broadcaster::TfBroadcaster" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>

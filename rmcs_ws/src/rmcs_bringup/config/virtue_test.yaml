@@ -13,10 +13,10 @@ virtual_chassis_lift_controller:
     initial_angle_deg: 15.0
 
     # Plant model
-    inertia: 0.04
+    inertia: 0.0336
     viscous_damping: 0.02
     reduction_ratio: 36.0
-    gravity_gain: 8.4
+    gravity_gain: 11.2
     torque_limit: 28.0
 
     # Disturbance torque magnitude per cycle
@@ -48,8 +48,8 @@ virtual_chassis_lift_controller:
     adrc_nlesf_alpha1: 0.75
     adrc_nlesf_alpha2: 0.7
     adrc_nlesf_delta: 0.02
-    adrc_nlesf_u_min: -28.0
-    adrc_nlesf_u_max: 28.0
+    adrc_nlesf_u_min: -25.0
+    adrc_nlesf_u_max: 25.0
 
     # Target angle source:
     # 1) target_mode: yaml  -> read fixed_target_angle_deg from parameter (deg)
@@ -69,6 +69,8 @@ value_broadcaster:
       - /test/motor/velocity_rad_s
       - /test/mechanism/angle_deg
       - /test/target/angle_deg
+      - /test/adrc/z3
+      - /test/model/gravity_torque
 
 # This is a example of how to separate the ADRC parameters into a different node if desired.
 # adrc_controller:
@@ -91,5 +93,5 @@ value_broadcaster:
 #     alpha1: 0.75
 #     alpha2: 0.7
 #     delta: 0.02
-#     u_min: -28.0
-#     u_max: 28.0
+#     u_min: -25.0
+#     u_max: 25.0

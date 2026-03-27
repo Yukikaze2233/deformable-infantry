@@ -36,6 +36,8 @@ public:
         register_output("/test/motor/velocity_rad_s", motor_velocity_output_, 0.0);
         register_output("/test/mechanism/angle_deg", mechanism_angle_deg_output_, 0.0);
         register_output("/test/target/angle_deg", target_theta_deg_output_, 0.0);
+        register_output("/test/adrc/z3", z3_output_, 0.0);
+        register_output("/test/model/gravity_torque", gravity_torque_output_, 0.0);
 
         load_parameters_();
         initialize_state_();
@@ -65,6 +67,8 @@ public:
         *motor_velocity_output_      = theta_dot_rad_;
         *mechanism_angle_deg_output_ = theta_rad_ * kRadToDeg;
         *target_theta_deg_output_    = target_theta_deg;
+        *z3_output_                  = eso_out.z3;
+        *gravity_torque_output_      = gravity_gain_ * std::cos(theta_rad_);
 
         elapsed_time_s_ += dt_;
 
@@ -74,7 +78,7 @@ public:
                 "target=%.3f deg, angle=%.3f deg, motor_vel=%.3f rad/s, torque=%.3f",
                 target_theta_deg,
                 theta_rad_ * kRadToDeg,
-                theta_dot_rad_,
+                theta_dot_rad_ / 36.0,
                 last_torque_cmd_);
         }
     }
@@ -403,6 +407,8 @@ private:
     OutputInterface<double> motor_velocity_output_;
     OutputInterface<double> mechanism_angle_deg_output_;
     OutputInterface<double> target_theta_deg_output_;
+    OutputInterface<double> z3_output_;
+    OutputInterface<double> gravity_torque_output_;
 
     const double dt_ = 0.001;
 
