@@ -88,7 +88,7 @@ public:
 
     void command_update() {
         const bool even = ((cmd_tick_++ & 1u) == 0u);
-        rmcs_board_lite->command_update(even);
+        rmcs_board_->command_update(even);
         top_board_->command_update();
     }
 
@@ -236,14 +236,6 @@ private:
 
             deformableInfantry.register_output(
                 "/chassis/yaw/velocity_imu", chassis_yaw_velocity_imu_, 0);
-            deformableInfantry.register_output("/chassis/imu/pitch", chassis_pitch_imu_, 0);
-            deformableInfantry.register_output("/chassis/imu/roll", chassis_roll_imu_, 0);
-            deformableInfantry.register_output("/chassis/imu/pitch", chassis_imu_pitch_, 0.0);
-            deformableInfantry.register_output("/chassis/imu/roll", chassis_imu_roll_, 0.0);
-            deformableInfantry.register_output(
-                "/chassis/imu/pitch_rate", chassis_imu_pitch_rate_, 0.0);
-            deformableInfantry.register_output(
-                "/chassis/imu/roll_rate", chassis_imu_roll_rate_, 0.0);
             deformableInfantry.register_output(
                 "/chassis/left_front_joint/physical_angle", left_front_joint_physical_angle_, nan_);
             deformableInfantry.register_output(
@@ -282,29 +274,6 @@ private:
         void update() {
             imu_.update_status();
             *chassis_yaw_velocity_imu_ = imu_.gz();
-            const auto [pitch, roll] = chassis_pitch_roll_from_quaternion_();
-            *chassis_pitch_imu_ = pitch;
-            *chassis_roll_imu_ = roll;
-            {
-                const double q0 = imu_.q0();
-                const double q1 = imu_.q1();
-                const double q2 = imu_.q2();
-                const double q3 = imu_.q3();
-
-                double sin_pitch = 2.0 * (q0 * q2 - q3 * q1);
-                sin_pitch = std::clamp(sin_pitch, -1.0, 1.0);
-
-                const double standard_pitch = std::asin(sin_pitch);
-                const double standard_roll =
-                    std::atan2(2.0 * (q0 * q1 + q2 * q3), 1.0 - 2.0 * (q1 * q1 + q2 * q2));
-
-                // Export chassis attitude using the requested convention:
-                // pitch < 0 when the front is higher, roll > 0 when the left side is higher.
-                *chassis_imu_pitch_ = -standard_pitch;
-                *chassis_imu_roll_ = standard_roll;
-                *chassis_imu_pitch_rate_ = -imu_.gy();
-                *chassis_imu_roll_rate_ = imu_.gx();
-            }
 
             for (auto& motor : chassis_wheel_motors_)
                 motor.update_status();
@@ -387,17 +356,6 @@ private:
                     .can_id = 0x142,
                     .can_data = gimbal_yaw_motor_.generate_torque_command().as_bytes(),
                 });
-                builder.can1_transmit({
-                    .can_id = 0x1FE,
-                    .can_data =
-                        device::CanPacket8{
-                                           device::CanPacket8::PaddingQuarter{},
-                                           device::CanPacket8::PaddingQuarter{},
-                                           device::CanPacket8::PaddingQuarter{},
-                                           supercap_.generate_command(),
-                                           }
-                            .as_bytes(),
-                });
             } else {
                 builder.can0_transmit({
                     .can_id = 0x141,
@@ -430,18 +388,6 @@ private:
         }
 
         static double to_physical_velocity_(double motor_velocity) { return -motor_velocity; }
-
-        std::pair<double, double> chassis_pitch_roll_from_quaternion_() {
-            const double w = imu_.q0();
-            const double x = imu_.q1();
-            const double y = imu_.q2();
-            const double z = imu_.q3();
-
-            const double sin_pitch = std::clamp(2.0 * (w * y - z * x), -1.0, 1.0);
-            const double pitch = std::asin(sin_pitch);
-            const double roll = std::atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y));
-            return {pitch, roll};
-        }
 
         void update_joint_physical_feedback_(
             size_t index, OutputInterface<double>& angle_output,
@@ -648,12 +594,6 @@ private:
         OutputInterface<rmcs_msgs::SerialInterface> referee_serial_;
 
         OutputInterface<double> chassis_yaw_velocity_imu_;
-        OutputInterface<double> chassis_pitch_imu_;
-        OutputInterface<double> chassis_roll_imu_;
-        OutputInterface<double> chassis_imu_pitch_;
-        OutputInterface<double> chassis_imu_roll_;
-        OutputInterface<double> chassis_imu_pitch_rate_;
-        OutputInterface<double> chassis_imu_roll_rate_;
         OutputInterface<double> left_front_joint_physical_angle_;
         OutputInterface<double> left_back_joint_physical_angle_;
         OutputInterface<double> right_back_joint_physical_angle_;
