@@ -86,7 +86,8 @@ public:
     }
 
     void command_update() {
-        rmcs_board_->command_update();
+        const bool even = ((cmd_tick_++ & 1u) == 0u);
+        rmcs_board_->command_update(even);
         top_board_->command_update();
     }
 
@@ -226,8 +227,6 @@ private:
 
             deformableInfantry.register_output(
                 "/chassis/yaw/velocity_imu", chassis_yaw_velocity_imu_, 0);
-            deformableInfantry.register_output("/chassis/imu/pitch", chassis_pitch_imu_, 0);
-            deformableInfantry.register_output("/chassis/imu/roll", chassis_roll_imu_, 0);
             deformableInfantry.register_output(
                 "/chassis/left_front_joint/physical_angle", left_front_joint_physical_angle_, nan_);
             deformableInfantry.register_output(
@@ -260,9 +259,6 @@ private:
         void update() {
             imu_.update_status();
             *chassis_yaw_velocity_imu_ = imu_.gz();
-            const auto [pitch, roll] = chassis_pitch_roll_from_quaternion_();
-            *chassis_pitch_imu_ = pitch;
-            *chassis_roll_imu_ = roll;
 
             for (auto& motor : chassis_wheel_motors_)
                 motor.update_status();
@@ -290,74 +286,75 @@ private:
                 gimbal_yaw_motor_.angle());
         }
 
-        void command_update() {
+        void command_update(bool even) {
             auto builder = start_transmit();
-
-            builder.can0_transmit({
-                .can_id = 0x200,
-                .can_data =
-                    device::CanPacket8{
-                                       chassis_wheel_motors_[0].generate_command(),
-                                       device::CanPacket8::PaddingQuarter{},
-                                       device::CanPacket8::PaddingQuarter{},
-                                       device::CanPacket8::PaddingQuarter{},
-                                       }
-                        .as_bytes(),
-            });
-            builder.can1_transmit({
-                .can_id = 0x200,
-                .can_data =
-                    device::CanPacket8{
-                                       chassis_wheel_motors_[1].generate_command(),
-                                       device::CanPacket8::PaddingQuarter{},
-                                       device::CanPacket8::PaddingQuarter{},
-                                       device::CanPacket8::PaddingQuarter{},
-                                       }
-                        .as_bytes(),
-            });
-            builder.can2_transmit({
-                .can_id = 0x200,
-                .can_data =
-                    device::CanPacket8{
-                                       chassis_wheel_motors_[2].generate_command(),
-                                       device::CanPacket8::PaddingQuarter{},
-                                       gimbal_bullet_feeder_.generate_command(),
-                                       device::CanPacket8::PaddingQuarter{},
-                                       }
-                        .as_bytes(),
-            });
-            builder.can3_transmit({
-                .can_id = 0x200,
-                .can_data =
-                    device::CanPacket8{
-                                       chassis_wheel_motors_[3].generate_command(),
-                                       device::CanPacket8::PaddingQuarter{},
-                                       device::CanPacket8::PaddingQuarter{},
-                                       device::CanPacket8::PaddingQuarter{},
-                                       }
-                        .as_bytes(),
-            });
-
-            builder.can0_transmit({
-                .can_id = 0x141,
-                .can_data = chassis_joint_motors_[0].generate_command().as_bytes(),
-            });
-            builder.can1_transmit({
-                .can_id = 0x141,
-                .can_data = chassis_joint_motors_[1].generate_command().as_bytes(),
-            });
-            builder.can2_transmit({
-                .can_id = 0x141,
-                .can_data = chassis_joint_motors_[2].generate_command().as_bytes(),
-            });
-            builder.can3_transmit({
-                .can_id = 0x141,
-                .can_data = chassis_joint_motors_[3].generate_command().as_bytes(),
-            });
-            builder.can2_transmit({
-                .can_id = 0x142,
-                .can_data = gimbal_yaw_motor_.generate_torque_command().as_bytes(),
-            });
+            if (even) {
+                builder.can0_transmit({
+                    .can_id = 0x200,
+                    .can_data =
+                        device::CanPacket8{
+                                           chassis_wheel_motors_[0].generate_command(),
+                                           device::CanPacket8::PaddingQuarter{},
+                                           device::CanPacket8::PaddingQuarter{},
+                                           device::CanPacket8::PaddingQuarter{},
+                                           }
+                            .as_bytes(),
+                });
+                builder.can1_transmit({
+                    .can_id = 0x200,
+                    .can_data =
+                        device::CanPacket8{
+                                           chassis_wheel_motors_[1].generate_command(),
+                                           device::CanPacket8::PaddingQuarter{},
+                                           device::CanPacket8::PaddingQuarter{},
+                                           device::CanPacket8::PaddingQuarter{},
+                                           }
+                            .as_bytes(),
+                });
+                builder.can2_transmit({
+                    .can_id = 0x200,
+                    .can_data =
+                        device::CanPacket8{
+                                           chassis_wheel_motors_[2].generate_command(),
+                                           device::CanPacket8::PaddingQuarter{},
+                                           gimbal_bullet_feeder_.generate_command(),
+                                           device::CanPacket8::PaddingQuarter{},
+                                           }
+                            .as_bytes(),
+                });
+                builder.can3_transmit({
+                    .can_id = 0x200,
+                    .can_data =
+                        device::CanPacket8{
+                                           chassis_wheel_motors_[3].generate_command(),
+                                           device::CanPacket8::PaddingQuarter{},
+                                           device::CanPacket8::PaddingQuarter{},
+                                           device::CanPacket8::PaddingQuarter{},
+                                           }
+                            .as_bytes(),
+                });
+                builder.can2_transmit({
+                    .can_id = 0x142,
+                    .can_data = gimbal_yaw_motor_.generate_torque_command().as_bytes(),
+                });
+            } else {
+                builder.can0_transmit({
+                    .can_id = 0x141,
+                    .can_data = chassis_joint_motors_[0].generate_command().as_bytes(),
+                });
+                builder.can1_transmit({
+                    .can_id = 0x141,
+                    .can_data = chassis_joint_motors_[1].generate_command().as_bytes(),
+                });
+                builder.can2_transmit({
+                    .can_id = 0x141,
+                    .can_data = chassis_joint_motors_[2].generate_command().as_bytes(),
+                });
+                builder.can3_transmit({
+                    .can_id = 0x141,
+                    .can_data = chassis_joint_motors_[3].generate_command().as_bytes(),
+                });
+            }
         }
 
     private:
@@ -372,18 +369,6 @@ private:
         }
 
         static double to_physical_velocity_(double motor_velocity) { return -motor_velocity; }
-
-        std::pair<double, double> chassis_pitch_roll_from_quaternion_() {
-            const double w = imu_.q0();
-            const double x = imu_.q1();
-            const double y = imu_.q2();
-            const double z = imu_.q3();
-
-            const double sin_pitch = std::clamp(2.0 * (w * y - z * x), -1.0, 1.0);
-            const double pitch = std::asin(sin_pitch);
-            const double roll = std::atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y));
-            return {pitch, roll};
-        }
 
         void update_joint_physical_feedback_(
             size_t index, OutputInterface<double>& angle_output,
@@ -473,7 +458,7 @@ private:
             }
         }
 
-        void uart2_receive_callback(const librmcs::data::UartDataView& data) override {
+        void uart0_receive_callback(const librmcs::data::UartDataView& data) override {
             const std::byte* ptr = data.uart_data.data();
             referee_ring_buffer_receive_.emplace_back_n(
                 [&ptr](std::byte* storage) noexcept { *storage = *ptr++; }, data.uart_data.size());
@@ -504,8 +489,6 @@ private:
         OutputInterface<rmcs_msgs::SerialInterface> referee_serial_;
 
         OutputInterface<double> chassis_yaw_velocity_imu_;
-        OutputInterface<double> chassis_pitch_imu_;
-        OutputInterface<double> chassis_roll_imu_;
         OutputInterface<double> left_front_joint_physical_angle_;
         OutputInterface<double> left_back_joint_physical_angle_;
         OutputInterface<double> right_back_joint_physical_angle_;
@@ -676,6 +659,7 @@ private:
     std::shared_ptr<DeformableInfantryOmniCommand> deformable_infantry_command_;
     std::unique_ptr<BottomBoard> rmcs_board_;
     std::unique_ptr<TopBoard> top_board_;
+    uint32_t cmd_tick_ = 0;
 
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr joints_calibrate_subscription_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr gimbal_calibrate_subscription_;
