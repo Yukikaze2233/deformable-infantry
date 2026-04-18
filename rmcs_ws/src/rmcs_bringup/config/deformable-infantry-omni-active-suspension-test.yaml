@@ -36,6 +36,8 @@ rmcs_executor:
 value_broadcaster:
   ros__parameters:
     forward_list:
+      - /chassis/imu/pitch
+      - /chassis/imu/roll
       - /chassis/left_front_joint/control_torque
       - /chassis/left_back_joint/control_torque
       - /chassis/right_front_joint/control_torque
