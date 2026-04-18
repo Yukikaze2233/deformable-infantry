@@ -23,6 +23,7 @@ rmcs_executor:
       - rmcs_core::controller::chassis::DeformableChassis -> chassis_controller
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::DeformableOmniWheelController -> deformable_chassis_controller
+      - rmcs_core::controller::chassis::ActiveSuspension -> active_suspension
 
       - rmcs_core::controller::chassis::DeformableJointController -> lf_joint_controller
       - rmcs_core::controller::chassis::DeformableJointController -> lb_joint_controller
@@ -202,7 +203,12 @@ deformable_chassis_controller:
     k2: 3.082190e-03
     no_load_power: 11.37
 
-lf_joint_controller:
+active_suspension:
+  ros__parameters:
+    switch_torque_limit: 200.0
+    steady_torque_limit: 50.0
+
+lf_joint_adrc_controller:
   ros__parameters:
     # Joint-local servo inputs produced by chassis intent generation
     measurement_angle: /chassis/left_front_joint/physical_angle
