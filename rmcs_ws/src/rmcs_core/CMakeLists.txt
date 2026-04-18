@@ -16,7 +16,7 @@ ament_auto_find_build_dependencies()
 include(FetchContent)
 set(BUILD_STATIC_LIBRMCS ON CACHE BOOL "Build static librmcs SDK" FORCE)
 set(LIBRMCS_SOURCE_DIR
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../librmcs-sdk-src-3.1.0"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../librmcs-sdk-src-3.1.0-beta.1"
 )
 
 if(NOT EXISTS "${LIBRMCS_SOURCE_DIR}/CMakeLists.txt")
