@@ -236,6 +236,8 @@ private:
 
             deformableInfantry.register_output(
                 "/chassis/yaw/velocity_imu", chassis_yaw_velocity_imu_, 0);
+            deformableInfantry.register_output("/chassis/imu/pitch", chassis_pitch_imu_, 0);
+            deformableInfantry.register_output("/chassis/imu/roll", chassis_roll_imu_, 0);
             deformableInfantry.register_output("/chassis/imu/pitch", chassis_imu_pitch_, 0.0);
             deformableInfantry.register_output("/chassis/imu/roll", chassis_imu_roll_, 0.0);
             deformableInfantry.register_output(
@@ -280,6 +282,9 @@ private:
         void update() {
             imu_.update_status();
             *chassis_yaw_velocity_imu_ = imu_.gz();
+            const auto [pitch, roll] = chassis_pitch_roll_from_quaternion_();
+            *chassis_pitch_imu_ = pitch;
+            *chassis_roll_imu_ = roll;
             {
                 const double q0 = imu_.q0();
                 const double q1 = imu_.q1();
@@ -425,6 +430,18 @@ private:
         }
 
         static double to_physical_velocity_(double motor_velocity) { return -motor_velocity; }
+
+        std::pair<double, double> chassis_pitch_roll_from_quaternion_() {
+            const double w = imu_.q0();
+            const double x = imu_.q1();
+            const double y = imu_.q2();
+            const double z = imu_.q3();
+
+            const double sin_pitch = std::clamp(2.0 * (w * y - z * x), -1.0, 1.0);
+            const double pitch = std::asin(sin_pitch);
+            const double roll = std::atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y));
+            return {pitch, roll};
+        }
 
         void update_joint_physical_feedback_(
             size_t index, OutputInterface<double>& angle_output,
@@ -631,6 +648,8 @@ private:
         OutputInterface<rmcs_msgs::SerialInterface> referee_serial_;
 
         OutputInterface<double> chassis_yaw_velocity_imu_;
+        OutputInterface<double> chassis_pitch_imu_;
+        OutputInterface<double> chassis_roll_imu_;
         OutputInterface<double> chassis_imu_pitch_;
         OutputInterface<double> chassis_imu_roll_;
         OutputInterface<double> chassis_imu_pitch_rate_;
