@@ -60,9 +60,11 @@ public:
     }
 
     void update() override {
-        if (std::isnan(chassis_control_velocity_->vector[0]) || !std::isfinite(*chassis_radius_)
-            || *chassis_radius_ <= 1e-6) {
-            publish_confidence({1.0, 1.0, 1.0, 1.0}, {0.0, 0.0, 0.0, 0.0});
+        sanitize_last_confidence_();
+
+        const Eigen::Vector3d control_velocity = chassis_control_velocity_->vector;
+        if (!control_velocity.allFinite() || !std::isfinite(*chassis_radius_) || *chassis_radius_ <= 1e-6) {
+            publish_neutral_confidence_();
             return;
         }
 
@@ -77,23 +79,36 @@ public:
             right_front_joint_torque_);
 
         const auto expected_wheel_velocities = expected_wheel_velocity_(
-            chassis_control_velocity_->vector, std::max(*chassis_radius_, 1e-6));
+            control_velocity, std::max(*chassis_radius_, 1e-6));
+        if (!all_finite_(expected_wheel_velocities)) {
+            publish_neutral_confidence_();
+            return;
+        }
 
-        std::array<double, 4> confidence{};
-        std::array<double, 4> residual{};
+        std::array<double, 4> confidence = last_confidence_;
+        std::array<double, 4> residual = {0.0, 0.0, 0.0, 0.0};
 
-        const double command_norm = chassis_control_velocity_->vector.norm();
+        const double command_norm = control_velocity.norm();
         for (size_t i = 0; i < 4; ++i) {
             const double expected = expected_wheel_velocities[i];
             const double measured = wheel_velocities[i];
+            const double wheel_torque = wheel_torques[i];
+            const double joint_torque = joint_torques[i];
+            if (!std::isfinite(expected) || !std::isfinite(measured) || !std::isfinite(wheel_torque)
+                || !std::isfinite(joint_torque)) {
+                confidence[i] = last_confidence_[i];
+                residual[i] = 0.0;
+                continue;
+            }
+
             const double denom = std::max(std::abs(expected), 1.0);
             residual[i] = std::abs(measured - expected) / denom;
 
             const double slip_score = 1.0 / (1.0 + slip_ratio_gain_ * residual[i]);
             const double wheel_load_score = std::clamp(
-                std::abs(wheel_torques[i]) / std::max(wheel_torque_reference_, 1e-6), 0.0, 1.0);
+                std::abs(wheel_torque) / std::max(wheel_torque_reference_, 1e-6), 0.0, 1.0);
             const double joint_support_score = std::clamp(
-                std::abs(joint_torques[i]) / std::max(joint_torque_reference_, 1e-6), 0.0, 1.0);
+                std::abs(joint_torque) / std::max(joint_torque_reference_, 1e-6), 0.0, 1.0);
 
             double raw_confidence = 1.0;
             if (command_norm > moving_speed_threshold_) {
@@ -103,20 +118,38 @@ public:
             }
 
             const double blended = std::clamp(raw_confidence, confidence_floor_, 1.0);
-            confidence[i] =
+            const double filtered =
                 (1.0 - confidence_alpha_) * last_confidence_[i] + confidence_alpha_ * blended;
-            last_confidence_[i] = confidence[i];
+            if (!std::isfinite(filtered)) {
+                confidence[i] = last_confidence_[i];
+                residual[i] = 0.0;
+                continue;
+            }
+
+            confidence[i] = filtered;
+            last_confidence_[i] = filtered;
         }
 
         publish_confidence(confidence, residual);
     }
 
 private:
+    static bool all_finite_(const std::array<double, 4>& values) {
+        return std::all_of(values.begin(), values.end(), [](double value) { return std::isfinite(value); });
+    }
+
     template <typename InterfaceT>
     static std::array<double, 4> read_inputs_(
         const InterfaceT& left_front, const InterfaceT& left_back, const InterfaceT& right_back,
         const InterfaceT& right_front) {
         return {*left_front, *left_back, *right_back, *right_front};
+    }
+
+    void sanitize_last_confidence_() {
+        for (double& confidence : last_confidence_) {
+            if (!std::isfinite(confidence))
+                confidence = 1.0;
+        }
     }
 
     std::array<double, 4> expected_wheel_velocity_(
@@ -139,18 +172,27 @@ private:
 
     void publish_confidence(
         const std::array<double, 4>& confidence, const std::array<double, 4>& residual) {
-        *left_front_contact_confidence_ = confidence[0];
-        *left_back_contact_confidence_ = confidence[1];
-        *right_back_contact_confidence_ = confidence[2];
-        *right_front_contact_confidence_ = confidence[3];
+        const auto safe_confidence =
+            all_finite_(confidence) ? confidence : std::array<double, 4>{1.0, 1.0, 1.0, 1.0};
+        const auto safe_residual =
+            all_finite_(residual) ? residual : std::array<double, 4>{0.0, 0.0, 0.0, 0.0};
 
-        *left_front_contact_residual_ = residual[0];
-        *left_back_contact_residual_ = residual[1];
-        *right_back_contact_residual_ = residual[2];
-        *right_front_contact_residual_ = residual[3];
+        *left_front_contact_confidence_ = safe_confidence[0];
+        *left_back_contact_confidence_ = safe_confidence[1];
+        *right_back_contact_confidence_ = safe_confidence[2];
+        *right_front_contact_confidence_ = safe_confidence[3];
+
+        *left_front_contact_residual_ = safe_residual[0];
+        *left_back_contact_residual_ = safe_residual[1];
+        *right_back_contact_residual_ = safe_residual[2];
+        *right_front_contact_residual_ = safe_residual[3];
 
         *contact_confidence_mean_ =
-            (confidence[0] + confidence[1] + confidence[2] + confidence[3]) / 4.0;
+            (safe_confidence[0] + safe_confidence[1] + safe_confidence[2] + safe_confidence[3]) / 4.0;
+    }
+
+    void publish_neutral_confidence_() {
+        publish_confidence({1.0, 1.0, 1.0, 1.0}, {0.0, 0.0, 0.0, 0.0});
     }
 
     const double wheel_radius_;

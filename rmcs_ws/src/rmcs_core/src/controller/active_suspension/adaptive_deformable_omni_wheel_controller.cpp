@@ -62,22 +62,48 @@ public:
     }
 
     void update() override {
-        if (std::isnan(chassis_control_velocity_->vector[0]) || !std::isfinite(*chassis_radius_)
-            || *chassis_radius_ <= 1e-6) {
+        const Eigen::Vector3d control_velocity = chassis_control_velocity_->vector;
+        if (!control_velocity.allFinite() || !std::isfinite(*power_limit_)
+            || !std::isfinite(*chassis_radius_) || *chassis_radius_ <= 1e-6) {
             return reset_all_controls();
         }
 
         const Eigen::Vector4d wheel_velocities = {
             *left_front_velocity_, *left_back_velocity_, *right_back_velocity_, *right_front_velocity_};
+        if (!all_finite_(wheel_velocities))
+            return reset_all_controls();
+
+        const Eigen::Vector4d wheel_max_torque{
+            *left_front_wheel_max_torque_, *left_back_wheel_max_torque_, *right_back_wheel_max_torque_,
+            *right_front_wheel_max_torque_};
+        if (!all_finite_(wheel_max_torque))
+            return reset_all_controls();
+
         const Eigen::Vector4d contact_weight = weighted_contact_();
+        if (!all_finite_(contact_weight))
+            return reset_all_controls();
 
         const auto chassis_velocity = calculate_chassis_velocity_weighted_(wheel_velocities, contact_weight);
+        if (!all_finite_(chassis_velocity))
+            return reset_all_controls();
+
         auto chassis_control_torque = calculate_chassis_control_torque_(chassis_velocity);
+        if (!all_finite_(chassis_control_torque.torque) || !all_finite_(chassis_control_torque.lambda))
+            return reset_all_controls();
+
         const auto wheel_pid_torques = calculate_wheel_pid_torques_(wheel_velocities, chassis_velocity);
+        if (!all_finite_(wheel_pid_torques))
+            return reset_all_controls();
+
         chassis_control_torque.torque = constrain_chassis_control_torque_(
             wheel_velocities, chassis_control_torque, wheel_pid_torques, contact_weight);
+        if (!all_finite_(chassis_control_torque.torque))
+            return reset_all_controls();
+
         const auto wheel_control_torques = calculate_wheel_control_torques_weighted_(
-            chassis_control_torque, wheel_pid_torques, contact_weight);
+            chassis_control_torque, wheel_pid_torques, contact_weight, wheel_max_torque);
+        if (!all_finite_(wheel_control_torques))
+            return reset_all_controls();
 
         *left_front_control_torque_ = wheel_control_torques[0];
         *left_back_control_torque_ = wheel_control_torques[1];
@@ -95,18 +121,29 @@ private:
     static constexpr double g_ = 9.81;
 
     void reset_all_controls() {
+        translational_velocity_pid_calculator_.reset();
+        angular_velocity_pid_calculator_.reset();
+        wheel_velocity_pid_.reset();
+
         *left_front_control_torque_ = 0.0;
         *left_back_control_torque_ = 0.0;
         *right_back_control_torque_ = 0.0;
         *right_front_control_torque_ = 0.0;
     }
 
+    static bool all_finite_(const Eigen::Vector2d& values) { return values.allFinite(); }
+    static bool all_finite_(const Eigen::Vector3d& values) { return values.allFinite(); }
+    static bool all_finite_(const Eigen::Vector4d& values) { return values.allFinite(); }
+
     Eigen::Vector4d weighted_contact_() const {
         Eigen::Vector4d weight{
             *left_front_contact_confidence_, *left_back_contact_confidence_,
             *right_back_contact_confidence_, *right_front_contact_confidence_};
-        for (int i = 0; i < weight.size(); ++i)
+        for (int i = 0; i < weight.size(); ++i) {
+            if (!std::isfinite(weight[i]))
+                weight[i] = 1.0;
             weight[i] = std::clamp(weight[i], min_contact_weight_, 1.0);
+        }
         return weight;
     }
 
@@ -194,7 +231,7 @@ private:
 
     Eigen::Vector4d calculate_wheel_control_torques_weighted_(
         const ChassisControlTorque& chassis_control_torque, const Eigen::Vector4d& wheel_pid_torques,
-        const Eigen::Vector4d& contact_weight) const {
+        const Eigen::Vector4d& contact_weight, const Eigen::Vector4d& wheel_max_torque) const {
         const Eigen::Vector4d s{
             chassis_control_torque.lambda.x(), chassis_control_torque.lambda.y(),
             -chassis_control_torque.lambda.x(), -chassis_control_torque.lambda.y()};
@@ -212,10 +249,6 @@ private:
         Eigen::Vector4d wheel_torques =
             w * c.transpose() * normal.ldlt().solve(d);
         wheel_torques += wheel_pid_torques;
-
-        const Eigen::Vector4d wheel_max_torque{
-            *left_front_wheel_max_torque_, *left_back_wheel_max_torque_, *right_back_wheel_max_torque_,
-            *right_front_wheel_max_torque_};
 
         double scale = 1.0;
         for (int i = 0; i < wheel_torques.size(); ++i) {

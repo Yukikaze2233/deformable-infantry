@@ -139,12 +139,14 @@ public:
         if (!all_finite_(joint_angle))
             return disable_outputs_();
 
-        const auto confidence = read_required_(
+        const auto raw_confidence = read_required_(
             lf_contact_confidence_, lb_contact_confidence_, rb_contact_confidence_,
             rf_contact_confidence_);
+        const auto confidence =
+            all_finite_(raw_confidence) ? raw_confidence : std::array<double, 4>{1.0, 1.0, 1.0, 1.0};
 
-        const double pitch = *pitch_angle_;
-        const double roll = *roll_angle_;
+        const double pitch = std::isfinite(*pitch_angle_) ? *pitch_angle_ : 0.0;
+        const double roll = std::isfinite(*roll_angle_) ? *roll_angle_ : 0.0;
 
         if (!trajectory_active_) {
             trajectory_physical_angle_ = joint_angle;
@@ -154,9 +156,16 @@ public:
         }
 
         const auto desired = compute_desired_physical_angle_(base_target_angle, confidence, pitch, roll);
+        if (!all_finite_(desired))
+            return disable_outputs_();
+
         step_trajectory_(desired);
-        publish_targets_();
-        update_torque_limits_(joint_angle, confidence);
+        if (!trajectory_finite_())
+            return disable_outputs_();
+        if (!publish_targets_())
+            return disable_outputs_();
+        if (!update_torque_limits_(joint_angle, confidence))
+            return disable_outputs_();
     }
 
 private:
@@ -187,6 +196,12 @@ private:
 
     static bool all_finite_(const std::array<double, 4>& values) {
         return std::all_of(values.begin(), values.end(), [](double value) { return std::isfinite(value); });
+    }
+
+    static void reset_switch_state_(SwitchState& switch_state) {
+        switch_state.last_target = nan_;
+        switch_state.ticks_since_switch = 0;
+        switch_state.switch_active = false;
     }
 
     std::array<double, 4> compute_desired_physical_angle_(
@@ -250,7 +265,20 @@ private:
         }
     }
 
-    void publish_targets_() {
+    bool trajectory_finite_() const {
+        return all_finite_(trajectory_physical_angle_) && all_finite_(trajectory_physical_velocity_)
+            && all_finite_(trajectory_physical_acceleration_);
+    }
+
+    bool publish_targets_() {
+        const std::array<double, 4> target_angle{
+            physical_to_motor_angle(trajectory_physical_angle_[kLeftFront]),
+            physical_to_motor_angle(trajectory_physical_angle_[kLeftBack]),
+            physical_to_motor_angle(trajectory_physical_angle_[kRightBack]),
+            physical_to_motor_angle(trajectory_physical_angle_[kRightFront])};
+        if (!all_finite_(target_angle))
+            return false;
+
         *lf_target_physical_angle_ = trajectory_physical_angle_[kLeftFront];
         *lb_target_physical_angle_ = trajectory_physical_angle_[kLeftBack];
         *rb_target_physical_angle_ = trajectory_physical_angle_[kRightBack];
@@ -266,13 +294,14 @@ private:
         *rb_target_physical_acceleration_ = trajectory_physical_acceleration_[kRightBack];
         *rf_target_physical_acceleration_ = trajectory_physical_acceleration_[kRightFront];
 
-        *lf_target_angle_ = physical_to_motor_angle(trajectory_physical_angle_[kLeftFront]);
-        *lb_target_angle_ = physical_to_motor_angle(trajectory_physical_angle_[kLeftBack]);
-        *rb_target_angle_ = physical_to_motor_angle(trajectory_physical_angle_[kRightBack]);
-        *rf_target_angle_ = physical_to_motor_angle(trajectory_physical_angle_[kRightFront]);
+        *lf_target_angle_ = target_angle[kLeftFront];
+        *lb_target_angle_ = target_angle[kLeftBack];
+        *rb_target_angle_ = target_angle[kRightBack];
+        *rf_target_angle_ = target_angle[kRightFront];
+        return true;
     }
 
-    void update_torque_limits_(
+    bool update_torque_limits_(
         const std::array<double, 4>& current_angle, const std::array<double, 4>& confidence) {
         const std::array<double, 4> target_angle = trajectory_physical_angle_;
         update_joint_torque_limit_(
@@ -287,6 +316,8 @@ private:
         update_joint_torque_limit_(
             target_angle[kRightFront], current_angle[kRightFront], confidence[kRightFront],
             rf_switch_state_, *rf_torque_limit_);
+        return all_finite_(
+            std::array<double, 4>{*lf_torque_limit_, *lb_torque_limit_, *rb_torque_limit_, *rf_torque_limit_});
     }
 
     void update_joint_torque_limit_(
@@ -297,6 +328,10 @@ private:
             steady_torque_limit_ + angle_error_torque_gain_ * angle_error
                 + low_confidence_torque_boost_ * (1.0 - std::clamp(confidence, 0.0, 1.0)),
             0.0, switch_torque_limit_);
+        if (!std::isfinite(steady_limit)) {
+            torque_limit = steady_torque_limit_;
+            return;
+        }
 
         if (!std::isfinite(switch_state.last_target)
             || std::abs(current_target_angle - switch_state.last_target) > 1e-4) {
@@ -326,6 +361,11 @@ private:
 
     void disable_outputs_() {
         trajectory_active_ = false;
+        reset_switch_state_(lf_switch_state_);
+        reset_switch_state_(lb_switch_state_);
+        reset_switch_state_(rb_switch_state_);
+        reset_switch_state_(rf_switch_state_);
+
         *lf_target_angle_ = nan_;
         *lb_target_angle_ = nan_;
         *rb_target_angle_ = nan_;
@@ -345,6 +385,11 @@ private:
         *lb_target_physical_acceleration_ = nan_;
         *rb_target_physical_acceleration_ = nan_;
         *rf_target_physical_acceleration_ = nan_;
+
+        *lf_torque_limit_ = steady_torque_limit_;
+        *lb_torque_limit_ = steady_torque_limit_;
+        *rb_torque_limit_ = steady_torque_limit_;
+        *rf_torque_limit_ = steady_torque_limit_;
     }
 
     const double min_angle_rad_;
