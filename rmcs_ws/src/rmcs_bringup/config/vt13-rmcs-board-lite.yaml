@@ -1,0 +1,10 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs_core::hardware::Vt13RmcsBoardLite -> vt13_board
+      - rmcs_core::controller::gimbal::VT13Monitor -> vt13_monitor
+
+vt13_board:
+  ros__parameters:
+    board_serial: "AF-2713-E328-1A3D-1C11-3D87-3026-5FF4-4D2D"

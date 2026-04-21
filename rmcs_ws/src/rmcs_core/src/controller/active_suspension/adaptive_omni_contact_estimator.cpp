@@ -26,6 +26,7 @@ public:
         , slip_ratio_gain_(get_parameter_or("slip_ratio_gain", 1.5))
         , wheel_torque_reference_(get_parameter_or("wheel_torque_reference", 0.8))
         , joint_torque_reference_(get_parameter_or("joint_torque_reference", 5.0))
+        , load_share_floor_(get_parameter_or("load_share_floor", 0.05))
         , confidence_floor_(get_parameter_or("confidence_floor", 0.15)) {
 
         register_input("/chassis/control_velocity", chassis_control_velocity_);
@@ -55,6 +56,11 @@ public:
         register_output("/chassis/left_back_contact/residual", left_back_contact_residual_, 0.0);
         register_output("/chassis/right_back_contact/residual", right_back_contact_residual_, 0.0);
         register_output("/chassis/right_front_contact/residual", right_front_contact_residual_, 0.0);
+
+        register_output("/chassis/left_front_contact/load_share", left_front_contact_load_share_, 0.25);
+        register_output("/chassis/left_back_contact/load_share", left_back_contact_load_share_, 0.25);
+        register_output("/chassis/right_back_contact/load_share", right_back_contact_load_share_, 0.25);
+        register_output("/chassis/right_front_contact/load_share", right_front_contact_load_share_, 0.25);
 
         register_output("/chassis/contact/confidence_mean", contact_confidence_mean_, 1.0);
     }
@@ -87,6 +93,7 @@ public:
 
         std::array<double, 4> confidence = last_confidence_;
         std::array<double, 4> residual = {0.0, 0.0, 0.0, 0.0};
+        std::array<double, 4> support_proxy = {load_share_floor_, load_share_floor_, load_share_floor_, load_share_floor_};
 
         const double command_norm = control_velocity.norm();
         for (size_t i = 0; i < 4; ++i) {
@@ -109,12 +116,15 @@ public:
                 std::abs(wheel_torque) / std::max(wheel_torque_reference_, 1e-6), 0.0, 1.0);
             const double joint_support_score = std::clamp(
                 std::abs(joint_torque) / std::max(joint_torque_reference_, 1e-6), 0.0, 1.0);
+            support_proxy[i] = std::max(
+                load_share_floor_, 0.65 * joint_support_score + 0.35 * wheel_load_score);
 
             double raw_confidence = 1.0;
             if (command_norm > moving_speed_threshold_) {
-                raw_confidence = 0.55 * slip_score + 0.25 * wheel_load_score + 0.20 * joint_support_score;
+                raw_confidence =
+                    0.45 * slip_score + 0.25 * wheel_load_score + 0.30 * joint_support_score;
             } else {
-                raw_confidence = 0.60 + 0.40 * joint_support_score;
+                raw_confidence = 0.10 + 0.90 * support_proxy[i];
             }
 
             const double blended = std::clamp(raw_confidence, confidence_floor_, 1.0);
@@ -130,7 +140,8 @@ public:
             last_confidence_[i] = filtered;
         }
 
-        publish_confidence(confidence, residual);
+        const auto load_share = normalize_load_share_(support_proxy);
+        publish_confidence(confidence, residual, load_share);
     }
 
 private:
@@ -170,12 +181,31 @@ private:
         return wheel_control_velocity;
     }
 
+    std::array<double, 4> normalize_load_share_(const std::array<double, 4>& support_proxy) const {
+        auto safe_proxy = support_proxy;
+        double sum = 0.0;
+        for (double& value : safe_proxy) {
+            if (!std::isfinite(value))
+                value = load_share_floor_;
+            value = std::max(value, load_share_floor_);
+            sum += value;
+        }
+        if (!std::isfinite(sum) || sum <= 1e-9)
+            return {0.25, 0.25, 0.25, 0.25};
+        for (double& value : safe_proxy)
+            value /= sum;
+        return safe_proxy;
+    }
+
     void publish_confidence(
-        const std::array<double, 4>& confidence, const std::array<double, 4>& residual) {
+        const std::array<double, 4>& confidence, const std::array<double, 4>& residual,
+        const std::array<double, 4>& load_share) {
         const auto safe_confidence =
             all_finite_(confidence) ? confidence : std::array<double, 4>{1.0, 1.0, 1.0, 1.0};
         const auto safe_residual =
             all_finite_(residual) ? residual : std::array<double, 4>{0.0, 0.0, 0.0, 0.0};
+        const auto safe_load_share =
+            all_finite_(load_share) ? load_share : std::array<double, 4>{0.25, 0.25, 0.25, 0.25};
 
         *left_front_contact_confidence_ = safe_confidence[0];
         *left_back_contact_confidence_ = safe_confidence[1];
@@ -187,12 +217,18 @@ private:
         *right_back_contact_residual_ = safe_residual[2];
         *right_front_contact_residual_ = safe_residual[3];
 
+        *left_front_contact_load_share_ = safe_load_share[0];
+        *left_back_contact_load_share_ = safe_load_share[1];
+        *right_back_contact_load_share_ = safe_load_share[2];
+        *right_front_contact_load_share_ = safe_load_share[3];
+
         *contact_confidence_mean_ =
             (safe_confidence[0] + safe_confidence[1] + safe_confidence[2] + safe_confidence[3]) / 4.0;
     }
 
     void publish_neutral_confidence_() {
-        publish_confidence({1.0, 1.0, 1.0, 1.0}, {0.0, 0.0, 0.0, 0.0});
+        publish_confidence(
+            {1.0, 1.0, 1.0, 1.0}, {0.0, 0.0, 0.0, 0.0}, {0.25, 0.25, 0.25, 0.25});
     }
 
     const double wheel_radius_;
@@ -201,6 +237,7 @@ private:
     const double slip_ratio_gain_;
     const double wheel_torque_reference_;
     const double joint_torque_reference_;
+    const double load_share_floor_;
     const double confidence_floor_;
 
     std::array<double, 4> last_confidence_ = {1.0, 1.0, 1.0, 1.0};
@@ -232,6 +269,11 @@ private:
     OutputInterface<double> left_back_contact_residual_;
     OutputInterface<double> right_back_contact_residual_;
     OutputInterface<double> right_front_contact_residual_;
+
+    OutputInterface<double> left_front_contact_load_share_;
+    OutputInterface<double> left_back_contact_load_share_;
+    OutputInterface<double> right_back_contact_load_share_;
+    OutputInterface<double> right_front_contact_load_share_;
 
     OutputInterface<double> contact_confidence_mean_;
 };

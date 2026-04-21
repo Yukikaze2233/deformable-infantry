@@ -1261,15 +1261,15 @@ private:
         return joint_zero_physical_angle_rad_ - motor_angle_rad;
     }
 
-    void scope_motor_control(bool prone_override = false) {
-        const bool prone_target_active = prone_override;
-        if (prone_target_active && *mode_ != rmcs_msgs::ChassisMode::SPIN) {
-            *scope_motor_control_torque = -0.3;
+    void scope_motor_control() {
+        if (current_target_angle_ == min_angle_ && *mode_ != rmcs_msgs::ChassisMode::SPIN){
+            // *scope_motor_control_torque = -0.3;
             // if (*scope_motor_velocity <= std::abs(0.1)){
             //     *scope_motor_control_torque = 0.18 * 1.0 / 36.0;
             // }
-        } else {
-            *scope_motor_control_torque = 0.3;
+        }
+        else{
+            // *scope_motor_control_torque = 0.3;
             // if (*scope_motor_velocity <= std::abs(0.1)){
             //     *scope_motor_control_torque = -0.18 * 1.0 / 36.0;
             // }
