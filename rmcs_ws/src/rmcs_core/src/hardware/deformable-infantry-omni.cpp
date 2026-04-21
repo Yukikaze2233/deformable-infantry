@@ -25,6 +25,7 @@
 #include <librmcs/agent/rmcs_board.hpp>
 
 #include "hardware/device/bmi088.hpp"
+#include "hardware/device/VT13.hpp"
 #include "hardware/device/can_packet.hpp"
 #include "hardware/device/dji_motor.hpp"
 #include "hardware/device/dr16.hpp"
@@ -521,7 +522,8 @@ private:
                   deformableInfantry, deformableInfantry_command, "/gimbal/left_friction")
             , gimbal_right_friction_(
                   deformableInfantry, deformableInfantry_command, "/gimbal/right_friction")
-            , scope_motor_(deformableInfantry, deformableInfantry_command, "/gimbal/scope") {
+            , scope_motor_(deformableInfantry, deformableInfantry_command, "/gimbal/scope")
+            , vt13_(deformableInfantry) {
 
             gimbal_pitch_motor_.configure(
                 device::LkMotor::Config{device::LkMotor::Type::kMG4010Ei10}
@@ -559,6 +561,7 @@ private:
 
         void update() {
             bmi088_.update_status();
+            vt13_.update_status();
 
             gimbal_pitch_motor_.update_status();
             gimbal_left_friction_.update_status();
@@ -607,7 +610,11 @@ private:
         }
 
     private:
-        void uart1_receive_callback(const librmcs::data::UartDataView&) override {}
+        void dbus_receive_callback(const librmcs::data::UartDataView&) override {}
+
+        void uart1_receive_callback(const librmcs::data::UartDataView& data) override {
+            vt13_.store_status(data.uart_data.data(), data.uart_data.size());
+        }
 
         void can1_receive_callback(const librmcs::data::CanDataView& data) override {
             if (data.is_extended_can_id || data.is_remote_transmission) [[unlikely]]
@@ -647,6 +654,7 @@ private:
         device::DjiMotor gimbal_left_friction_;
         device::DjiMotor gimbal_right_friction_;
         device::DjiMotor scope_motor_;
+        device::VT13 vt13_;
     };
 
     OutputInterface<rmcs_description::Tf> tf_;

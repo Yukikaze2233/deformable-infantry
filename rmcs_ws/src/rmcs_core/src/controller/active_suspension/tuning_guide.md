@@ -1,383 +1,473 @@
-# 主动悬挂调参指南
+# 主动悬挂说明与调参指南
 
-## 适用范围
+## 1. 当前目标
 
-本指南对应当前这套测试链路：
+当前 `active_suspension` 目录下的实现，已经按照新的需求重构为以下目标：
 
+1. 让底盘尽量保持水平。
+2. 让底盘与四条腿中“轮底最高”的那条腿保持目标距离。
+3. 当某个轮子轻载或悬空时，快速向下探地，使其尽快重新接地。
+
+这里“轮底最高”在当前实现中等价为：
+
+`四个角点中，车体到轮底距离最小的那一个角`
+
+因为该角对应的轮底最接近底盘本体，也就是最高的那个轮底。
+
+## 2. 参与文件
+
+- `adaptive_omni_deformable_chassis.cpp`
+- `adaptive_omni_contact_estimator.cpp`
+- `adaptive_omni_active_suspension.cpp`
+- `adaptive_deformable_omni_wheel_controller.cpp`
 - `rmcs_bringup/config/deformable-infantry-omni-active-suspension-test.yaml`
-- `rmcs_core/src/controller/active_suspension/adaptive_omni_deformable_chassis.cpp`
-- `rmcs_core/src/controller/active_suspension/adaptive_omni_contact_estimator.cpp`
-- `rmcs_core/src/controller/active_suspension/adaptive_omni_active_suspension.cpp`
-- `rmcs_core/src/controller/active_suspension/adaptive_deformable_omni_wheel_controller.cpp`
 
-它的实际架构不是“全自动地形规划悬挂”，而是：
+本次改造主要落在：
 
-1. 底盘层先给出一个预设基础姿态。
-2. 接地估计器根据轮速、轮扭矩、关节扭矩估计四轮接地置信度。
-3. 主动悬挂层再用 `pitch`、`roll` 和接地置信度对四个关节目标角做二次修正。
-4. 四个 ADRC 把修正后的目标角闭环到实际关节。
-5. 轮子控制器再利用接地置信度做扭矩重分配。
+- `adaptive_omni_contact_estimator.cpp`
+- `adaptive_omni_active_suspension.cpp`
 
-## 先理解每层在做什么
+## 3. 现在这套算法在做什么
 
-### 1. 基础姿态层
+### 3.1 上层姿态层
 
-`AdaptiveOmniDeformableChassis` 负责生成：
+`adaptive_omni_deformable_chassis.cpp` 仍然负责根据遥控器、键盘、旋钮生成基础关节目标：
 
-- `/chassis/control_velocity`
-- `/chassis/*_joint/base_target_angle`
 - `/chassis/*_joint/base_target_physical_angle`
 
-这层主要由遥控器、键盘、旋钮触发预设高度或特殊姿态。
+但在当前需求下，这些基础目标的作用已经不再是“最终姿态”，而更接近：
 
-关键参数：
+- 提供机械工作区间内的基础站姿
+- 提供“目标离地间隙”的参考
 
-- `min_angle`
-- `max_angle`
-- `target_physical_velocity_limit`
-- `target_physical_acceleration_limit`
+主动悬挂层会从这 4 个基础目标里取：
 
-### 2. 接地估计层
+```text
+clearance_reference = min(base_target_clearance_i)
+```
 
-`AdaptiveOmniContactEstimator` 输出：
+也就是：
 
-- `/chassis/*_contact/confidence`
-- `/chassis/*_contact/residual`
-- `/chassis/contact/confidence_mean`
+`把四个基础腿长中最短的那个，作为底盘相对最高轮底的目标距离`
 
-它不是直接测法向力，而是启发式估计：
+### 3.2 接地估计层
 
-- 期望轮速和实际轮速偏差越大，接地越差。
-- 轮扭矩和关节扭矩越能“挂住负载”，接地越可信。
+`adaptive_omni_contact_estimator.cpp` 现在输出两类量：
 
-关键参数：
+- `confidence`
+- `load_share`
 
-- `wheel_radius`
-- `confidence_alpha`
-- `moving_speed_threshold`
-- `slip_ratio_gain`
-- `wheel_torque_reference`
-- `joint_torque_reference`
-- `confidence_floor`
+其中：
 
-### 3. 主动悬挂修正层
+- `confidence`：更偏向“这个角当前是不是接地可靠”
+- `load_share`：更偏向“四个角当前谁更轻、谁更重”
 
-`AdaptiveOmniActiveSuspension` 输入：
+新增接口：
 
-- 四个基础目标角
-- 四个实际关节物理角
-- 四个接地置信度
+- `/chassis/left_front_contact/load_share`
+- `/chassis/left_back_contact/load_share`
+- `/chassis/right_back_contact/load_share`
+- `/chassis/right_front_contact/load_share`
+
+当前并没有把关节扭矩直接解释成高精度牛顿值，而是先做相对量。这是因为扭矩返回当前只被认为“与真实扭矩成比例”，不是高精度绝对值。
+
+### 3.3 主动悬挂层
+
+`adaptive_omni_active_suspension.cpp` 现在不再使用“平均高度 + pitch/roll 叠加”的解释。
+
+当前实现使用的核心逻辑是：
+
+1. 将四个关节物理角换算成四个角点的真实竖直距离 `d_i(alpha_i, pitch, roll)`。
+2. 取四个角点距离中的最小值作为当前“最高轮底锚点”距离。
+3. 以这个最小值去跟踪基础目标中的最小值。
+4. 同时用 IMU 的 `pitch / roll` 做水平校正。
+5. 对轻载或悬空角启动探地状态机，给该角附加向下伸腿量。
+6. 最后将目标竖直距离反解回关节物理角，再发给现有关节 ADRC。
+
+## 4. 核心物理关系
+
+### 4.1 关节角到轮底竖直距离
+
+当前实现使用：
+
+```text
+d_i = - (R_world_body(pitch, roll) * p_wheel_bottom_body(alpha_i)).z
+```
+
+其中：
+
+- `d_i`：第 `i` 个角轮底到底盘的世界竖直距离
+- `R_world_body`：由 `pitch / roll` 生成的车体姿态旋转
+- `p_wheel_bottom_body(alpha_i)`：该角轮底在车体系中的位置
+- `alpha_i`：关节物理角
+
+代码中对应参数：
+
+- `radius_base`
+- `rod_length`
+- `body_length`
+- `body_width`
+- `pivot_offset`
+- `arm_length`
+- `pivot_z`
+- `wheel_bottom_offset`
+
+在车体目标保持水平时，上式退化为：
+
+```text
+d_i = arm_length * sin(alpha_i) - pivot_z + wheel_bottom_offset
+```
+
+因此目标角反解使用：
+
+```text
+alpha_i = asin((d_i + pivot_z - wheel_bottom_offset) / arm_length)
+```
+
+### 4.2 水平控制
+
+当前使用 IMU 的：
+
 - `/chassis/imu/pitch`
 - `/chassis/imu/roll`
 
-输出：
+目标固定为：
 
-- `/chassis/*_joint/target_angle`
-- `/chassis/*_joint/target_physical_angle`
-- `/chassis/*_joint/torque_limit`
+```text
+pitch_reference = 0
+roll_reference = 0
+```
 
-关键参数：
+然后根据左右、前后符号对四条腿做差分修正。
 
-- `contact_rebalance_gain_deg`
-- `contact_deadband`
+### 4.3 最高轮底锚定
+
+当前不是跟踪平均距离，而是跟踪：
+
+```text
+clearance_reference = min(base_target_clearance_i)
+clearance_estimate  = min(current_clearance_i)
+```
+
+再通过：
+
+```text
+anchor_target = clearance_estimate
+              + heave_gain * (clearance_reference - clearance_estimate)
+```
+
+把最小角点距离拉回目标值。
+
+随后对四个角的目标做统一平移，使得：
+
+```text
+min(desired_clearance_i) = clearance_reference
+```
+
+这样做的结果是：
+
+`底盘的最低离地约束，始终跟最高轮底那条腿绑定`
+
+### 4.4 探地状态机
+
+对每个角，若满足任一条件：
+
+- `confidence < unload_confidence_threshold`
+- `load_share < unload_load_share_threshold`
+
+则进入探地状态。
+
+探地状态下，该角会按固定速度增加探地伸长量：
+
+```text
+extension_radius += seek_ground_velocity * dt
+```
+
+当满足：
+
+- `confidence > reload_confidence_threshold`
+- `load_share > unload_load_share_threshold`
+
+时退出探地状态，并按释放速度逐步收回：
+
+```text
+extension_radius -= seek_ground_release_velocity * dt
+```
+
+探地量被限制在：
+
+```text
+0 <= extension_radius <= max_seek_ground_extension
+```
+
+## 5. 当前新增/变更的接口
+
+### 5.1 接地估计新增
+
+- `/chassis/left_front_contact/load_share`
+- `/chassis/left_back_contact/load_share`
+- `/chassis/right_back_contact/load_share`
+- `/chassis/right_front_contact/load_share`
+
+### 5.2 主动悬挂调试输出
+
+- `/chassis/body/heave_reference`
+- `/chassis/body/heave_estimate`
+- `/chassis/body/pitch_reference`
+- `/chassis/body/pitch_estimate`
+- `/chassis/body/roll_reference`
+- `/chassis/body/roll_estimate`
+- `/chassis/body/warp_reference`
+- `/chassis/body/warp_estimate`
+
+这些量已经加进：
+
+- `deformable-infantry-omni-active-suspension-test.yaml`
+
+对应的 `ValueBroadcaster` 转发列表中。
+
+## 6. 参数说明
+
+### 6.1 `adaptive_contact_estimator`
+
+- `wheel_radius`
+  轮半径，用于轮速运动学换算。
+
+- `confidence_alpha`
+  `confidence` 低通滤波系数。
+
+- `moving_speed_threshold`
+  超过该速度后，接地估计更多依赖滑移残差。
+
+- `slip_ratio_gain`
+  滑移误差惩罚强度。
+
+- `wheel_torque_reference`
+  轮扭矩归一化参考值。
+
+- `joint_torque_reference`
+  关节扭矩归一化参考值。
+
+- `load_share_floor`
+  `load_share` 的最小底值，避免某个角被归一化成 0 导致数值不稳定。
+
+- `confidence_floor`
+  接地置信度下限。
+
+### 6.2 `adaptive_active_suspension`
+
+- `radius_base`
+  旧几何代理常数，当前主要用于默认值推导，不再直接作为控制量。
+
+- `rod_length`
+  旧代理模型长度，当前主要用于兼容旧参数，不再直接定义真实竖直距离。
+
+- `body_length`
+  车体前后方向几何尺寸，用于竖直距离投影。
+
+- `body_width`
+  车体左右方向几何尺寸，用于竖直距离投影。
+
+- `pivot_offset`
+  角点到腿摆杆连接点的水平偏置。
+
+- `arm_length`
+  摆杆等效长度。
+
+- `pivot_z`
+  摆杆连接点相对车体参考平面的高度。
+
+- `wheel_bottom_offset`
+  从腿部几何末端到轮底最低点的固定垂向偏置。
+
+- `pitch_lever_arm`
+  `pitch` 转换到角点距离修正时使用的等效前后力臂。
+
+- `roll_lever_arm`
+  `roll` 转换到角点距离修正时使用的等效左右力臂。
+
+- `heave_gain`
+  最高轮底锚点距离回正增益。
+
 - `pitch_gain_deg_per_rad`
+  `pitch` 水平校正增益。
+
 - `roll_gain_deg_per_rad`
+  `roll` 水平校正增益。
+
+- `warp_gain`
+  对对角扭转误差的抑制强度。
+
+- `unload_confidence_threshold`
+  小于该值时，认为该角可能轻载或悬空。
+
+- `reload_confidence_threshold`
+  大于该值时，认为该角重新恢复接地。
+
+- `unload_load_share_threshold`
+  该角载荷分配低于此阈值时，也触发探地。
+
+- `max_seek_ground_extension`
+  单个角允许附加的最大探地伸长量。
+
+- `seek_ground_velocity`
+  探地时的附加伸长速度。
+
+- `seek_ground_release_velocity`
+  恢复接地后，附加伸长量的回收速度。
+
 - `switch_torque_limit`
 - `steady_torque_limit`
 - `angle_error_torque_gain`
 - `low_confidence_torque_boost`
 
-### 4. 轮子控制层
+这四个仍用于关节力矩限幅调度。
 
-`AdaptiveDeformableOmniWheelController` 会同时用接地置信度：
+## 7. 调参顺序
 
-- 估计车体速度
-- 对轮扭矩做加权分配
+### 第 1 步：先确认几何与方向
 
-关键参数：
+必须先确认：
 
-- `mess`
-- `moment_of_inertia`
-- `wheel_radius`
-- `friction_coefficient`
-- `k1`
-- `k2`
-- `no_load_power`
-- `min_contact_weight`
+- 四个关节零点正确
+- `physical_angle` 正方向正确
+- `pitch`、`roll` 正方向正确
+- `body_length`、`body_width`、`pivot_offset`、`arm_length`、`pivot_z`、`wheel_bottom_offset` 至少量级正确
 
-## 调参前提
+否则后面所有调参都没有意义。
 
-在动主动悬挂参数前，先确认下面几项成立：
+### 第 2 步：先只调水平，不开探地
 
-1. 四个关节零点正确，关节实际角度方向和机构几何含义一致。
-2. 只给基础目标角时，ADRC 能稳定闭到目标，不持续抖动、不明显超调。
-3. `/chassis/imu/pitch`、`/chassis/imu/roll` 数值正常，且正负方向符合底盘定义。
-4. 平地静止时，四个接地置信度接近且稳定。
-5. 主动修正关闭时，底盘能正常行驶。
+建议临时设置：
 
-如果前提不满足，不要直接调主动悬挂增益。
+- `max_seek_ground_extension: 0.0`
 
-## 建议观测量
+此时系统退化为：
 
-推荐先通过 `ValueBroadcaster` 转发并观察这些量：
+`最高轮底锚定 + 水平控制`
 
-- `/chassis/imu/pitch`
-- `/chassis/imu/roll`
-- `/chassis/left_front_contact/confidence`
-- `/chassis/left_back_contact/confidence`
-- `/chassis/right_back_contact/confidence`
-- `/chassis/right_front_contact/confidence`
-- `/chassis/contact/confidence_mean`
-- `/chassis/left_front_joint/control_torque`
-- `/chassis/left_back_joint/control_torque`
-- `/chassis/right_back_joint/control_torque`
-- `/chassis/right_front_joint/control_torque`
+先调：
 
-如果要更快定位问题，建议额外转发：
-
-- `/chassis/*_joint/physical_angle`
-- `/chassis/*_joint/target_physical_angle`
-- `/chassis/*_contact/residual`
-
-## 调参顺序
-
-### 第 1 步：先把主动修正关掉，只调基础姿态
-
-先把下面三个参数设成 0：
-
-- `contact_rebalance_gain_deg`
+- `heave_gain`
 - `pitch_gain_deg_per_rad`
 - `roll_gain_deg_per_rad`
+- `warp_gain`
 
-此时系统应退化为“只有预设基础姿态”的版本。
+观察：
 
-验证目标：
+- `/chassis/body/heave_reference`
+- `/chassis/body/heave_estimate`
+- `/chassis/body/pitch_estimate`
+- `/chassis/body/roll_estimate`
 
-- 预设姿态切换方向正确。
-- 四个关节都能跟上基础目标。
-- 切换时不会出现明显打角、卡顿、严重超调。
+目标是：
 
-如果这一层不稳定，后面所有主动修正都会被掩盖。
+- 平地静止时 `pitch_estimate`、`roll_estimate` 接近 0
+- `heave_estimate` 能跟住 `heave_reference`
+- 切换基础姿态时不抖、不明显打角
 
-### 第 2 步：确认 IMU 姿态方向
+### 第 3 步：再调接地估计
 
-把 `pitch_gain_deg_per_rad`、`roll_gain_deg_per_rad` 保持很小，例如 `1.0` 到 `2.0`。
+观察：
 
-做两个简单动作：
+- `/chassis/*_contact/confidence`
+- `/chassis/*_contact/load_share`
 
-1. 让车头抬高或压低，观察四个关节目标的变化方向。
-2. 让左侧或右侧抬高，观察左右关节目标的变化方向。
+目标是：
 
-如果修正方向反了，不要先怀疑算法，直接改增益符号：
+- 平地静止时，四个 `load_share` 接近静态真实分布
+- 某一角被垫高或悬空时，该角 `load_share` 明显变小
+- 低速越障时 `confidence` 和 `load_share` 的变化方向符合实际
 
-- `pitch_gain_deg_per_rad` 可取负值。
-- `roll_gain_deg_per_rad` 可取负值。
+优先调：
 
-先把方向调对，再谈大小。
-
-### 第 3 步：单独调接地估计
-
-继续保持 `contact_rebalance_gain_deg = 0`，只看置信度。
-
-建议做三组工况：
-
-1. 平地静止
-2. 平地匀速
-3. 单轮压块、单轮悬空、低附路面打滑
-
-目标现象：
-
-- 平地静止时四轮 `confidence` 接近。
-- 平地匀速时四轮 `confidence` 仍然接近，不应持续偏一侧。
-- 某个轮子明显更容易失地或打滑时，该轮 `confidence` 要能明显偏离其余三轮。
-
-参数建议：
-
-- `wheel_radius`
-  必须先准。这个值错了，轮速残差会整体失真。
+- `joint_torque_reference`
+- `wheel_torque_reference`
 - `confidence_alpha`
-  大则响应快但更抖，小则更稳但更钝。建议从 `0.1` 到 `0.2` 开始。
-- `moving_speed_threshold`
-  过低会让低速挪车也进入“滑移判别”模式，过高会让慢速越障时估计不敏感。
-- `slip_ratio_gain`
-  过小则打滑不敏感，过大则普通速度误差也会被当成低接地。
-- `wheel_torque_reference`
-  过大则轮扭矩贡献太弱，过小则稍微有扭矩就被判成高接地。
-- `joint_torque_reference`
-  逻辑同上。
-- `confidence_floor`
-  建议不要太高。太高会压缩高低轮之间的差异。
+- `load_share_floor`
 
-### 第 4 步：再打开接地重分配
+### 第 4 步：最后打开探地
 
-把 `contact_rebalance_gain_deg` 从小值开始加，例如：
+恢复：
 
-- `3` 到 `5`
-- 再到 `8` 到 `12`
+- `max_seek_ground_extension > 0`
 
-同时把 `pitch_gain_deg_per_rad`、`roll_gain_deg_per_rad` 先保持较小。
+建议从小值开始：
 
-目标现象：
+- `max_seek_ground_extension: 0.015 ~ 0.025`
+- `seek_ground_velocity: 0.12 ~ 0.20`
+- `seek_ground_release_velocity: 0.10 ~ 0.18`
 
-- 单轮失地或低附时，四个关节目标角出现合理的差分修正。
-- 修正量有明显方向性，而不是四个关节一起乱动。
+目标是：
 
-如果某个轮子低接地时修正方向和机构预期相反，可以直接改：
+- 某角轻载后，目标角会快速向下探
+- 接地恢复后，不会长时间卡在最大探地量
+- 不会因为噪声反复进出探地状态
 
-- `contact_rebalance_gain_deg` 为负值
+优先调：
 
-因为当前实现里低接地轮的修正方向最终由这个增益符号决定。
+- `unload_confidence_threshold`
+- `reload_confidence_threshold`
+- `unload_load_share_threshold`
+- `seek_ground_velocity`
+- `seek_ground_release_velocity`
 
-### 第 5 步：调姿态补偿幅度
+## 8. 推荐测试工况
 
-当接地重分配方向已经对了，再调：
+### 8.1 平地静止
 
-- `pitch_gain_deg_per_rad`
-- `roll_gain_deg_per_rad`
+检查：
 
-建议方法：
+- `pitch/roll` 是否压平
+- `heave_estimate` 是否贴近 `heave_reference`
+- 四个 `load_share` 是否稳定
 
-1. 先只调 `pitch_gain_deg_per_rad`
-2. 再只调 `roll_gain_deg_per_rad`
-3. 最后一起细调
+### 8.2 单角垫块
 
-经验上先从小值开始更稳妥：
+检查：
 
-- `2` 到 `4`：通常只提供轻微修正
-- `5` 到 `8`：开始能明显看到姿态补偿
-- `8` 以上：要密切注意抖动和耦合
+- 被垫高角是否成为“最高轮底锚点”
+- 底盘是否仍尽量保持水平
+- 其余轻载轮是否出现适度探地
 
-如果姿态反馈一有变化就频繁修正，先别急着减增益，优先看：
+### 8.3 单角悬空
 
-- `confidence_alpha` 是否太大
-- `contact_deadband` 是否太小
-- 关节 ADRC 是否本身过于敏感
+检查：
 
-### 第 6 步：最后调动作感和速度感
+- 对应角 `confidence` 或 `load_share` 是否快速下降
+- 探地附加伸长是否迅速增长
+- 落地后是否能及时释放探地量
 
-真正决定“修正看起来灵不灵”的，不只是增益，还包括轨迹限速：
+### 8.4 低速越障
 
-- `target_physical_velocity_limit`
-- `target_physical_acceleration_limit`
+检查：
 
-这两个参数在基础姿态层和主动悬挂层里都存在。
+- 底盘是否明显比原先更平
+- 高地侧是否作为锚点稳定车体高度
+- 低地侧是否主动补腿
 
-建议：
+## 9. 现阶段限制
 
-- 两层先保持一致
-- 若主动修正想更柔和，先减主动层
-- 若预设姿态切换太慢，先加基础层
+当前实现已经满足新的控制方向，但仍有明确边界：
 
-不要一边让基础层很激进，一边让主动层很保守，否则叠层后的动作会显得别扭。
+- 它依赖 `confidence + load_share` 判定轻载，不是高精度绝对法向载荷闭环。
+- “任意路段都绝对水平”在机械行程和力矩受限时不可能完全保证，只能在当前执行器能力范围内尽量做到。
+- 若地形突变超出悬挂总行程，或速度过高导致估计明显滞后，仍然可能出现短时失地。
+- 轮控层目前仍主要使用 `confidence`，还没完全升级到按 `load_share` 或绝对 `Fz` 做牵引约束。
 
-## 现象和对应处理
+## 10. 当前结论
 
-### 现象：平地上四轮置信度长期差很多
+现在这版程序已经不再是“单纯 IMU 调平”。
 
-优先检查：
+它的实际行为是：
 
-- 轮半径是否正确
-- 某个轮速方向是否反了
-- 关节零点是否错了
-- 接地估计参数是否过敏
+- 以最高轮底对应的角作为离地锚点
+- 用 IMU 持续压 `pitch/roll` 到水平
+- 对轻载或悬空角快速探地下压
+- 通过现有轨迹器和 ADRC 将目标稳定落到关节执行层
 
-优先改：
+如果后续还要继续升级，最自然的下一步是：
 
-- `wheel_radius`
-- `slip_ratio_gain`
-- `wheel_torque_reference`
-- `joint_torque_reference`
-
-### 现象：越障时置信度几乎不变化
-
-说明估计器太钝。
-
-优先改：
-
-- 增大 `slip_ratio_gain`
-- 降低 `wheel_torque_reference`
-- 降低 `joint_torque_reference`
-- 降低 `moving_speed_threshold`
-
-### 现象：关节有修正，但幅度太小
-
-优先改：
-
-- 增大 `contact_rebalance_gain_deg`
-- 增大 `pitch_gain_deg_per_rad`
-- 增大 `roll_gain_deg_per_rad`
-- 增大 `target_physical_velocity_limit`
-- 增大 `target_physical_acceleration_limit`
-
-同时确认：
-
-- ADRC 的实际闭环能力够不够
-- 关节目标角是否已经被 `min_angle` / `max_angle` 夹死
-
-### 现象：主动修正很明显，但整车发抖
-
-优先改：
-
-- 减小 `contact_rebalance_gain_deg`
-- 减小 `pitch_gain_deg_per_rad`
-- 减小 `roll_gain_deg_per_rad`
-- 增大 `contact_deadband`
-- 减小 `confidence_alpha`
-- 降低主动层 `target_physical_acceleration_limit`
-
-### 现象：接地差的一侧一直在大力顶，但没有实际效果
-
-优先检查：
-
-- 关节是否已经打到角度上限或下限
-- ADRC 是否已经持续饱和
-- 机构几何下该方向修正是否本来就不利于重新接地
-
-如果从力矩日志看经常顶满，就需要回头检查关节闭环和机械行程，而不是只继续加主动悬挂增益。
-
-## 当前实现里需要特别注意的点
-
-### 1. 基础层输出的速度和加速度当前没有被主动层直接利用
-
-当前主动层真正用来生成二次轨迹的是：
-
-- 基础目标角
-- 主动层自己的 `target_physical_velocity_limit`
-- 主动层自己的 `target_physical_acceleration_limit`
-
-所以如果你改了基础层的目标速度和加速度，但主动层自己的限速更严，最终关节动作还是会被主动层卡住。
-
-### 2. 接地置信度同时影响两条链
-
-同一个 `confidence` 不只影响主动悬挂角度修正，也影响轮子扭矩分配。
-
-这意味着：
-
-- 把置信度调得过于敏感，可能悬挂和轮控一起变得神经质。
-- 把置信度调得过于迟钝，可能悬挂和轮控一起反应迟缓。
-
-不要把它当成只服务于悬挂的一组参数。
-
-### 3. `switch_torque_limit` 和 `steady_torque_limit` 更适合按“相对效果”理解
-
-在当前链路里，它们的作用是给 ADRC 一个动态约束或激进度提示。
-
-如果你们底层实际力矩映射和这里的数值不是一一对应关系，就按“切换时更猛一些、稳定后更缓一些”的相对效果去调，不要执着于字面物理值。
-
-## 推荐的现场调参流程
-
-1. 先关掉全部主动修正，只调基础姿态和 ADRC。
-2. 验证 `pitch`、`roll` 正负方向。
-3. 单独调接地估计，先让 `confidence` 有可用差异。
-4. 打开 `contact_rebalance_gain_deg`，先把接地方向调对。
-5. 再慢慢加 `pitch_gain_deg_per_rad`、`roll_gain_deg_per_rad`。
-6. 最后用轨迹限速和死区把“动作感”收顺。
-
-## 最后的判断标准
-
-可以认为主动悬挂“已经调起来了”，至少要满足下面四条：
-
-1. 平地行驶时四轮置信度基本均衡，不持续偏一侧。
-2. 单轮失地、压块、打滑时，置信度会出现稳定且可解释的差异。
-3. 关节目标角会随 `pitch`、`roll` 和低接地轮位置发生合理差分变化。
-4. 修正后的目标角能够被 ADRC 稳定闭过去，不靠持续大幅振荡来实现。
+1. 把 `load_share` 升级成更可信的相对法向载荷估计
+2. 让轮控层也显式使用 `load_share`
+3. 再考虑更强的地形记忆或绝对法向载荷观测

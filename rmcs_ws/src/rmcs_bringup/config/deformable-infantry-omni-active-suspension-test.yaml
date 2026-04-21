@@ -46,7 +46,19 @@ value_broadcaster:
       - /chassis/left_back_contact/confidence
       - /chassis/right_back_contact/confidence
       - /chassis/right_front_contact/confidence
+      - /chassis/left_front_contact/load_share
+      - /chassis/left_back_contact/load_share
+      - /chassis/right_back_contact/load_share
+      - /chassis/right_front_contact/load_share
       - /chassis/contact/confidence_mean
+      - /chassis/body/heave_reference
+      - /chassis/body/heave_estimate
+      - /chassis/body/pitch_reference
+      - /chassis/body/pitch_estimate
+      - /chassis/body/roll_reference
+      - /chassis/body/roll_estimate
+      - /chassis/body/warp_reference
+      - /chassis/body/warp_estimate
 
 deformable_infantry:
   ros__parameters:
@@ -74,18 +86,37 @@ adaptive_contact_estimator:
     slip_ratio_gain: 1.5
     wheel_torque_reference: 0.8
     joint_torque_reference: 5.0
+    load_share_floor: 0.05
     confidence_floor: 0.15
 
 adaptive_active_suspension:
   ros__parameters:
+    radius_base: 0.2341741
+    rod_length: 0.150
+    pivot_offset: 0.17389
+    body_length: 0.0853
+    body_width: 0.0853
+    arm_length: 0.155
+    pivot_z: 0.14
+    wheel_bottom_offset: 0.055
+    pitch_lever_arm: 0.165586
+    roll_lever_arm: 0.165586
     min_angle: 20.0
     max_angle: 58.0
     target_physical_velocity_limit: 180.0
     target_physical_acceleration_limit: 720.0
+    heave_gain: 0.9
+    warp_gain: 0.25
+    unload_confidence_threshold: 0.55
+    reload_confidence_threshold: 0.75
+    unload_load_share_threshold: 0.18
+    max_seek_ground_extension: 0.035
+    seek_ground_velocity: 0.25
+    seek_ground_release_velocity: 0.18
     contact_rebalance_gain_deg: 12.0
     contact_deadband: 0.05
-    pitch_gain_deg_per_rad: 5.0
-    roll_gain_deg_per_rad: 5.0
+    pitch_gain_deg_per_rad: 18.0
+    roll_gain_deg_per_rad: 18.0
     switch_torque_limit: 120.0
     steady_torque_limit: 35.0
     angle_error_torque_gain: 40.0
