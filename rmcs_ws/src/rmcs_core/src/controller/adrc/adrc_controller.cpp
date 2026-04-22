@@ -41,6 +41,12 @@ public:
         }
 
         register_output(get_parameter("control").as_string(), control_);
+        if (has_parameter("eso_z2_output")) {
+            register_output(get_parameter("eso_z2_output").as_string(), eso_z2_output_);
+        }
+        if (has_parameter("eso_z3_output")) {
+            register_output(get_parameter("eso_z3_output").as_string(), eso_z3_output_);
+        }
 
         kt_ = get_parameter_or("kt", 1.0);
         b0_ = get_parameter_or("b0", 1.0);
@@ -99,6 +105,7 @@ public:
         const auto nlesf_out = nlesf_.compute(e1, e2, eso_out.z3, b0_);
         const double scaled_u = kt_ * nlesf_out.u;
 
+        publish_observer_outputs_(eso_out);
         const double final_u = std::clamp(scaled_u, output_min_, output_max_);
         *control_ = final_u;
         last_u_ = final_u;
@@ -134,7 +141,22 @@ private:
 
     void disable_output_() {
         *control_ = std::numeric_limits<double>::quiet_NaN();
+        if (eso_z2_output_.active()) {
+            *eso_z2_output_ = std::numeric_limits<double>::quiet_NaN();
+        }
+        if (eso_z3_output_.active()) {
+            *eso_z3_output_ = std::numeric_limits<double>::quiet_NaN();
+        }
         last_u_ = 0.0;
+    }
+
+    void publish_observer_outputs_(const ESO::Output& eso_out) {
+        if (eso_z2_output_.active()) {
+            *eso_z2_output_ = eso_out.z2;
+        }
+        if (eso_z3_output_.active()) {
+            *eso_z3_output_ = eso_out.z3;
+        }
     }
 
     TD::Config load_td_config() {
@@ -178,6 +200,8 @@ private:
     InputInterface<double> limit_;
 
     OutputInterface<double> control_;
+    OutputInterface<double> eso_z2_output_;
+    OutputInterface<double> eso_z3_output_;
 
     TD td_;
     ESO eso_;

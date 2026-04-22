@@ -29,7 +29,6 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , radius_base_(get_parameter_or("radius_base", 0.2341741))
-        , rod_length_(get_parameter_or("rod_length", 0.150))
         , pivot_offset_(get_parameter_or("pivot_offset", 0.17389))
         , body_length_(get_parameter_or(
               "body_length", std::numbers::sqrt2 * std::max(radius_base_ - pivot_offset_, 0.03)))
@@ -56,7 +55,6 @@ public:
         , max_seek_ground_extension_(get_parameter_or("max_seek_ground_extension", 0.035))
         , seek_ground_velocity_(get_parameter_or("seek_ground_velocity", 0.25))
         , seek_ground_release_velocity_(get_parameter_or("seek_ground_release_velocity", 0.18))
-        , contact_rebalance_gain_(deg_to_rad(get_parameter_or("contact_rebalance_gain_deg", 12.0)))
         , contact_deadband_(get_parameter_or("contact_deadband", 0.05))
         , pitch_gain_(deg_to_rad(get_parameter_or("pitch_gain_deg_per_rad", 5.0)))
         , roll_gain_(deg_to_rad(get_parameter_or("roll_gain_deg_per_rad", 5.0)))
@@ -667,8 +665,8 @@ private:
         *warp_estimate_ = nan_;
     }
 
+    // Geometry and body-to-wheel mapping.
     const double radius_base_;
-    const double rod_length_;
     const double pivot_offset_;
     const double body_length_;
     const double body_width_;
@@ -677,22 +675,29 @@ private:
     const double wheel_bottom_offset_;
     const double pitch_lever_arm_;
     const double roll_lever_arm_;
+
+    // Joint workspace and target trajectory limits.
     const double min_angle_rad_;
     const double max_angle_rad_;
     const double target_physical_velocity_limit_;
     const double target_physical_acceleration_limit_;
+
+    // Body-mode control gains.
     const double heave_gain_;
     const double warp_gain_;
+    const double contact_deadband_;
+    const double pitch_gain_;
+    const double roll_gain_;
+
+    // Seek-ground state-machine thresholds.
     const double unload_confidence_threshold_;
     const double reload_confidence_threshold_;
     const double unload_load_share_threshold_;
     const double max_seek_ground_extension_;
     const double seek_ground_velocity_;
     const double seek_ground_release_velocity_;
-    const double contact_rebalance_gain_;
-    const double contact_deadband_;
-    const double pitch_gain_;
-    const double roll_gain_;
+
+    // Joint torque-limit scheduling.
     const double switch_torque_limit_;
     const double steady_torque_limit_;
     const double angle_error_torque_gain_;
