@@ -81,18 +81,40 @@ adaptive_chassis_controller:
 adaptive_contact_estimator:
   ros__parameters:
     wheel_radius: 0.055
+    radius_base: 0.2341741
+    pivot_offset: 0.17389
+    body_length: 0.0853
+    body_width: 0.0853
+    arm_length: 0.155
     confidence_alpha: 0.15
+    support_force_alpha: 0.20
+    support_reference_rise_alpha: 0.05
+    support_reference_fall_alpha: 0.002
     moving_speed_threshold: 1.0
     slip_ratio_gain: 1.5
     wheel_torque_reference: 0.8
     joint_torque_reference: 5.0
+    local_support_low_ratio: 0.45
+    local_support_high_ratio: 0.80
+    global_support_low_ratio: 0.60
+    global_support_high_ratio: 0.90
+    shock_support_jump_ratio: 0.35
+    shock_angle_rate_threshold_deg: 40.0
+    shock_joint_rate_threshold_deg: 220.0
+    shock_residual_threshold: 0.35
+    shock_hold_time: 0.15
+    quasi_static_speed_threshold: 0.25
+    quasi_static_angle_rate_threshold_deg: 4.0
+    quasi_static_joint_rate_threshold_deg: 35.0
+    quasi_static_residual_threshold: 0.20
+    quasi_static_hold_time: 0.30
+    reference_update_load_share_threshold: 0.08
     load_share_floor: 0.05
     confidence_floor: 0.15
 
 adaptive_active_suspension:
   ros__parameters:
     radius_base: 0.2341741
-    rod_length: 0.150
     pivot_offset: 0.17389
     body_length: 0.0853
     body_width: 0.0853
@@ -113,7 +135,6 @@ adaptive_active_suspension:
     max_seek_ground_extension: 0.035
     seek_ground_velocity: 0.25
     seek_ground_release_velocity: 0.18
-    contact_rebalance_gain_deg: 12.0
     contact_deadband: 0.05
     pitch_gain_deg_per_rad: 18.0
     roll_gain_deg_per_rad: 18.0
@@ -211,6 +232,7 @@ lf_joint_adrc_controller:
     measurement: /chassis/left_front_joint/angle
     setpoint: /chassis/left_front_joint/target_angle
     control: /chassis/left_front_joint/control_torque
+    eso_z3_output: /chassis/left_front_joint/eso_z3
     limit: /chassis/left_front_joint/torque_limit
     kt: 1.0
     td_h: 0.001
@@ -232,6 +254,7 @@ lb_joint_adrc_controller:
     measurement: /chassis/left_back_joint/angle
     setpoint: /chassis/left_back_joint/target_angle
     control: /chassis/left_back_joint/control_torque
+    eso_z3_output: /chassis/left_back_joint/eso_z3
     limit: /chassis/left_back_joint/torque_limit
     kt: 1.0
     td_h: 0.001
@@ -253,6 +276,7 @@ rb_joint_adrc_controller:
     measurement: /chassis/right_back_joint/angle
     setpoint: /chassis/right_back_joint/target_angle
     control: /chassis/right_back_joint/control_torque
+    eso_z3_output: /chassis/right_back_joint/eso_z3
     limit: /chassis/right_back_joint/torque_limit
     kt: 1.0
     td_h: 0.001
@@ -274,6 +298,7 @@ rf_joint_adrc_controller:
     measurement: /chassis/right_front_joint/angle
     setpoint: /chassis/right_front_joint/target_angle
     control: /chassis/right_front_joint/control_torque
+    eso_z3_output: /chassis/right_front_joint/eso_z3
     limit: /chassis/right_front_joint/torque_limit
     kt: 1.0
     td_h: 0.001
