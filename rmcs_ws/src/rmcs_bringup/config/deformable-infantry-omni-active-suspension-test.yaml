@@ -21,6 +21,7 @@ rmcs_executor:
       - rmcs_core::controller::pid::PidController -> bullet_feeder_velocity_pid_controller
 
       - rmcs_core::controller::active_suspension::AdaptiveOmniDeformableChassis -> adaptive_chassis_controller
+      - rmcs_core::controller::active_suspension::AdaptiveOmniImuAttitude -> adaptive_imu_attitude
       - rmcs_core::controller::active_suspension::AdaptiveOmniJointSupportObserver -> adaptive_joint_support_observer
       - rmcs_core::controller::active_suspension::AdaptiveOmniContactEstimator -> adaptive_contact_estimator
       - rmcs_core::controller::active_suspension::AdaptiveOmniActiveSuspension -> adaptive_active_suspension
