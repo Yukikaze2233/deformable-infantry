@@ -349,11 +349,60 @@ private:
         return -(rotation_world_body_(pitch, roll) * wheel_bottom_body).z();
     }
 
-    double clearance_to_physical_angle_(double clearance) const {
-        const double normalized = std::clamp(
-            (clearance + pivot_z_ - wheel_bottom_offset_) / std::max(arm_length_, 1e-6),
-            -1.0, 1.0);
-        return std::asin(normalized);
+    double clamp_clearance_to_joint_limits_(
+        size_t index, double clearance, double pitch, double roll) const {
+        const double clearance_at_min_angle =
+            physical_angle_to_clearance_(index, min_angle_rad_, pitch, roll);
+        const double clearance_at_max_angle =
+            physical_angle_to_clearance_(index, max_angle_rad_, pitch, roll);
+        if (!std::isfinite(clearance) || !std::isfinite(clearance_at_min_angle)
+            || !std::isfinite(clearance_at_max_angle)) {
+            return nan_;
+        }
+
+        return std::clamp(
+            clearance, std::min(clearance_at_min_angle, clearance_at_max_angle),
+            std::max(clearance_at_min_angle, clearance_at_max_angle));
+    }
+
+    double clearance_to_physical_angle_(
+        size_t index, double clearance, double pitch, double roll) const {
+        double low_angle = min_angle_rad_;
+        double high_angle = max_angle_rad_;
+        double low_clearance = physical_angle_to_clearance_(index, low_angle, pitch, roll);
+        double high_clearance = physical_angle_to_clearance_(index, high_angle, pitch, roll);
+        double target = clamp_clearance_to_joint_limits_(index, clearance, pitch, roll);
+        if (!std::isfinite(low_clearance) || !std::isfinite(high_clearance) || !std::isfinite(target))
+            return nan_;
+
+        if (std::abs(low_clearance - target) <= 1e-9)
+            return low_angle;
+        if (std::abs(high_clearance - target) <= 1e-9)
+            return high_angle;
+
+        // The forward geometry is continuous on the joint travel range, so bisection gives a
+        // pose-consistent inverse without assuming zero pitch/roll.
+        for (int iteration = 0; iteration < 48; ++iteration) {
+            const double mid_angle = 0.5 * (low_angle + high_angle);
+            const double mid_clearance = physical_angle_to_clearance_(index, mid_angle, pitch, roll);
+            if (!std::isfinite(mid_clearance))
+                return nan_;
+            if (std::abs(mid_clearance - target) <= 1e-7)
+                return mid_angle;
+
+            const double low_error = low_clearance - target;
+            const double mid_error = mid_clearance - target;
+            if ((low_error <= 0.0 && mid_error >= 0.0) || (low_error >= 0.0 && mid_error <= 0.0)) {
+                high_angle = mid_angle;
+                high_clearance = mid_clearance;
+            } else {
+                low_angle = mid_angle;
+                low_clearance = mid_clearance;
+            }
+        }
+
+        return std::abs(low_clearance - target) <= std::abs(high_clearance - target) ? low_angle
+                                                                                      : high_angle;
     }
 
     double min_clearance_() const {
@@ -458,6 +507,8 @@ private:
 
     std::array<double, 4> compute_desired_physical_angle_(
         double clearance_reference, const BodyModes& estimated_modes) const {
+        const double pitch = estimated_modes.pitch_angle;
+        const double roll = estimated_modes.roll_angle;
         const double anchor_target = estimated_modes.heave_radius
                                    + heave_gain_ * (clearance_reference - estimated_modes.heave_radius);
         const double pitch_radius = pitch_lever_arm_ * pitch_gain_ * estimated_modes.pitch_angle;
@@ -477,14 +528,15 @@ private:
         const double min_corner_clearance =
             *std::min_element(desired_clearance.begin(), desired_clearance.end());
         const double anchor_shift = anchor_target - min_corner_clearance;
-        for (double& clearance : desired_clearance)
-            clearance = std::clamp(clearance + anchor_shift, min_clearance_(), max_clearance_());
+        for (size_t i = 0; i < kJointCount; ++i)
+            desired_clearance[i] =
+                clamp_clearance_to_joint_limits_(i, desired_clearance[i] + anchor_shift, pitch, roll);
         if (!all_finite_(desired_clearance))
             return {nan_, nan_, nan_, nan_};
 
         std::array<double, 4> desired{};
         for (size_t i = 0; i < kJointCount; ++i)
-            desired[i] = clearance_to_physical_angle_(desired_clearance[i]);
+            desired[i] = clearance_to_physical_angle_(i, desired_clearance[i], pitch, roll);
         return desired;
     }
 

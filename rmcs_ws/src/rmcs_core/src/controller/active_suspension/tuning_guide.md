@@ -71,6 +71,24 @@ clearance_reference = min(base_target_clearance_i)
 
 当前并没有把关节扭矩直接解释成高精度牛顿值，而是先做相对量。这是因为扭矩返回当前只被认为“与真实扭矩成比例”，不是高精度绝对值。
 
+当前接地估计主路径读取的是独立支撑观测器输出：
+
+- `/chassis/left_front_joint/support_observer_z3`
+- `/chassis/left_back_joint/support_observer_z3`
+- `/chassis/right_back_joint/support_observer_z3`
+- `/chassis/right_front_joint/support_observer_z3`
+
+这样接地估计不再直接依赖关节 ADRC 的 `eso_z3`，可以避免在执行器依赖图里形成
+`active_suspension -> ADRC -> contact_estimator -> active_suspension` 的闭环。
+
+另外：
+
+- `load_share` 由相对支撑代理量归一化得到，不是由 `confidence` / `support_score` 归一化得到
+- `/chassis/*_contact/normal_force_estimate`
+- `/chassis/contact/normal_force_total`
+
+以上两个输出表示相对支撑估计本身，不是 `[0, 1]` 的接地分数。
+
 ### 3.3 主动悬挂层
 
 `adaptive_omni_active_suspension.cpp` 现在不再使用“平均高度 + pitch/roll 叠加”的解释。

@@ -109,10 +109,18 @@ public:
         register_input(
             "/chassis/right_front_joint/physical_angle", right_front_joint_physical_angle_, false);
 
-        register_input("/chassis/left_front_joint/eso_z3", left_front_joint_eso_z3_, false);
-        register_input("/chassis/left_back_joint/eso_z3", left_back_joint_eso_z3_, false);
-        register_input("/chassis/right_back_joint/eso_z3", right_back_joint_eso_z3_, false);
-        register_input("/chassis/right_front_joint/eso_z3", right_front_joint_eso_z3_, false);
+        register_input(
+            "/chassis/left_front_joint/support_observer_z3", left_front_joint_support_observer_z3_,
+            false);
+        register_input(
+            "/chassis/left_back_joint/support_observer_z3", left_back_joint_support_observer_z3_,
+            false);
+        register_input(
+            "/chassis/right_back_joint/support_observer_z3", right_back_joint_support_observer_z3_,
+            false);
+        register_input(
+            "/chassis/right_front_joint/support_observer_z3",
+            right_front_joint_support_observer_z3_, false);
 
         register_input("/chassis/imu/pitch", chassis_imu_pitch_, false);
         register_input("/chassis/imu/roll", chassis_imu_roll_, false);
@@ -196,9 +204,9 @@ public:
         const auto physical_angles = read_optional_inputs_(
             left_front_joint_physical_angle_, left_back_joint_physical_angle_,
             right_back_joint_physical_angle_, right_front_joint_physical_angle_);
-        const auto joint_eso_z3 = read_optional_inputs_(
-            left_front_joint_eso_z3_, left_back_joint_eso_z3_, right_back_joint_eso_z3_,
-            right_front_joint_eso_z3_);
+        const auto support_observer_z3 = read_optional_inputs_(
+            left_front_joint_support_observer_z3_, left_back_joint_support_observer_z3_,
+            right_back_joint_support_observer_z3_, right_front_joint_support_observer_z3_);
         const double pitch =
             (chassis_imu_pitch_.ready() && std::isfinite(*chassis_imu_pitch_)) ? *chassis_imu_pitch_
                                                                                 : 0.0;
@@ -212,6 +220,7 @@ public:
         std::array<double, 4> support_ratio = {nan_, nan_, nan_, nan_};
         std::array<double, 4> support_score = {1.0, 1.0, 1.0, 1.0};
         std::array<double, 4> legacy_support_score = {nan_, nan_, nan_, nan_};
+        std::array<double, 4> support_estimate = {nan_, nan_, nan_, nan_};
         std::array<double, 4> predicted_support_reference = {nan_, nan_, nan_, nan_};
         std::array<bool, 4> observer_available = {false, false, false, false};
         std::array<ReferenceFeatureVector, 4> reference_features = zero_reference_features_array_();
@@ -227,9 +236,21 @@ public:
 
             legacy_support_score[i] =
                 legacy_support_score_(wheel_torques[i], joint_torques[i]);
+            if (std::isfinite(physical_angles[i])) {
+                reference_features[i] = reference_features_(physical_angles[i], pitch, roll);
+                if (support_reference_initialized_[i]) {
+                    predicted_support_reference[i] =
+                        support_reference_from_model_(i, reference_features[i]);
+                }
+            }
+
             const double observer_proxy =
-                support_proxy_from_observer_(i, joint_eso_z3[i], physical_angles[i], pitch, roll);
+                support_proxy_from_observer_(
+                    i, support_observer_z3[i], physical_angles[i], pitch, roll);
             if (!std::isfinite(observer_proxy)) {
+                support_estimate[i] = legacy_support_proxy_(
+                    legacy_support_score[i], predicted_support_reference[i],
+                    filtered_support_proxy_[i], last_support_proxy_[i]);
                 support_score[i] = std::isfinite(legacy_support_score[i]) ? legacy_support_score[i]
                                                                           : last_confidence_[i];
                 continue;
@@ -244,6 +265,7 @@ public:
                     + support_force_alpha_ * observer_proxy;
             }
             support_proxy[i] = std::max(filtered_support_proxy_[i], reference_floor_());
+            support_estimate[i] = support_proxy[i];
 
             reference_features[i] = reference_features_(physical_angles[i], pitch, roll);
             if (!support_reference_initialized_[i]) {
@@ -257,9 +279,7 @@ public:
 
             const double observer_score = support_presence_score_(
                 support_ratio[i], local_support_low_ratio_, local_support_high_ratio_);
-            support_score[i] = std::isfinite(legacy_support_score[i])
-                             ? std::max(observer_score, legacy_support_score[i])
-                             : observer_score;
+            support_score[i] = observer_score;
         }
 
         if (!all_finite_(support_score)) {
@@ -278,7 +298,7 @@ public:
         update_quasi_static_window_(!shock_active && quasi_static_candidate);
         const bool reference_learning_enabled = quasi_static_ready_();
 
-        const auto load_share = normalize_load_share_(support_score);
+        const auto load_share = normalize_load_share_(support_estimate);
         const double global_support_score = compute_global_support_score_(
             support_proxy, predicted_support_reference, legacy_support_score, observer_available);
 
@@ -309,7 +329,7 @@ public:
             reference_learning_enabled);
         update_motion_snapshot_(pitch, roll, physical_angles, support_proxy, observer_available);
         publish_contact_estimate(
-            confidence, residual, load_share, support_score, sum_array_(support_score));
+            confidence, residual, load_share, support_estimate, sum_finite_array_(support_estimate));
     }
 
 private:
@@ -366,6 +386,18 @@ private:
 
     static double mean_array_(const std::array<double, 4>& values) {
         return sum_array_(values) / static_cast<double>(kJointCount);
+    }
+
+    static double sum_finite_array_(const std::array<double, 4>& values) {
+        double sum = 0.0;
+        bool has_finite = false;
+        for (double value : values) {
+            if (!std::isfinite(value))
+                continue;
+            sum += value;
+            has_finite = true;
+        }
+        return has_finite ? sum : nan_;
     }
 
     static double inverse_lerp_clamped_(double value, double low, double high) {
@@ -466,16 +498,16 @@ private:
     }
 
     double support_proxy_from_observer_(
-        size_t index, double joint_eso_z3, double physical_angle_rad, double pitch,
+        size_t index, double support_observer_z3, double physical_angle_rad, double pitch,
         double roll) const {
-        if (!std::isfinite(joint_eso_z3) || !std::isfinite(physical_angle_rad))
+        if (!std::isfinite(support_observer_z3) || !std::isfinite(physical_angle_rad))
             return nan_;
 
         const double jacobian = clearance_jacobian_abs_(index, physical_angle_rad, pitch, roll);
         if (!std::isfinite(jacobian) || jacobian < 1e-6)
             return nan_;
 
-        return std::abs(joint_eso_z3) / jacobian;
+        return std::abs(support_observer_z3) / jacobian;
     }
 
     double legacy_support_score_(double wheel_torque, double joint_torque) const {
@@ -487,6 +519,25 @@ private:
         const double joint_support_score = std::clamp(
             std::abs(joint_torque) / std::max(joint_torque_reference_, 1e-6), 0.0, 1.0);
         return std::clamp(0.65 * joint_support_score + 0.35 * wheel_load_score, 0.0, 1.0);
+    }
+
+    double legacy_support_proxy_(
+        double legacy_support_score, double predicted_support_reference,
+        double filtered_support_proxy, double last_support_proxy) const {
+        if (!std::isfinite(legacy_support_score))
+            return nan_;
+
+        double proxy_scale = nan_;
+        if (std::isfinite(predicted_support_reference))
+            proxy_scale = predicted_support_reference;
+        else if (std::isfinite(filtered_support_proxy))
+            proxy_scale = filtered_support_proxy;
+        else if (std::isfinite(last_support_proxy))
+            proxy_scale = last_support_proxy;
+        else
+            proxy_scale = 1.0;
+
+        return legacy_support_score * std::max(proxy_scale, reference_floor_());
     }
 
     ReferenceFeatureVector reference_features_(
@@ -685,8 +736,8 @@ private:
             global_support_low_ratio_, global_support_high_ratio_);
     }
 
-    std::array<double, 4> normalize_load_share_(const std::array<double, 4>& support_score) const {
-        auto safe_score = support_score;
+    std::array<double, 4> normalize_load_share_(const std::array<double, 4>& support_estimate) const {
+        auto safe_score = support_estimate;
         double sum = 0.0;
         for (double& value : safe_score) {
             if (!std::isfinite(value))
@@ -711,10 +762,6 @@ private:
             all_finite_(residual) ? residual : std::array<double, 4>{0.0, 0.0, 0.0, 0.0};
         const auto safe_load_share =
             all_finite_(load_share) ? load_share : std::array<double, 4>{0.25, 0.25, 0.25, 0.25};
-        const auto safe_support_estimate = all_finite_(support_estimate)
-                                               ? support_estimate
-                                               : std::array<double, 4>{nan_, nan_, nan_, nan_};
-
         *left_front_contact_confidence_ = safe_confidence[0];
         *left_back_contact_confidence_ = safe_confidence[1];
         *right_back_contact_confidence_ = safe_confidence[2];
@@ -730,10 +777,14 @@ private:
         *right_back_contact_load_share_ = safe_load_share[2];
         *right_front_contact_load_share_ = safe_load_share[3];
 
-        *left_front_contact_normal_force_estimate_ = safe_support_estimate[0];
-        *left_back_contact_normal_force_estimate_ = safe_support_estimate[1];
-        *right_back_contact_normal_force_estimate_ = safe_support_estimate[2];
-        *right_front_contact_normal_force_estimate_ = safe_support_estimate[3];
+        *left_front_contact_normal_force_estimate_ =
+            std::isfinite(support_estimate[0]) ? support_estimate[0] : nan_;
+        *left_back_contact_normal_force_estimate_ =
+            std::isfinite(support_estimate[1]) ? support_estimate[1] : nan_;
+        *right_back_contact_normal_force_estimate_ =
+            std::isfinite(support_estimate[2]) ? support_estimate[2] : nan_;
+        *right_front_contact_normal_force_estimate_ =
+            std::isfinite(support_estimate[3]) ? support_estimate[3] : nan_;
         *contact_normal_force_total_ = std::isfinite(total_support_estimate) ? total_support_estimate : nan_;
 
         *contact_confidence_mean_ = mean_array_(safe_confidence);
@@ -825,10 +876,10 @@ private:
     InputInterface<double> right_back_joint_physical_angle_;
     InputInterface<double> right_front_joint_physical_angle_;
 
-    InputInterface<double> left_front_joint_eso_z3_;
-    InputInterface<double> left_back_joint_eso_z3_;
-    InputInterface<double> right_back_joint_eso_z3_;
-    InputInterface<double> right_front_joint_eso_z3_;
+    InputInterface<double> left_front_joint_support_observer_z3_;
+    InputInterface<double> left_back_joint_support_observer_z3_;
+    InputInterface<double> right_back_joint_support_observer_z3_;
+    InputInterface<double> right_front_joint_support_observer_z3_;
 
     InputInterface<double> chassis_imu_pitch_;
     InputInterface<double> chassis_imu_roll_;
