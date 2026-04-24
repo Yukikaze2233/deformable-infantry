@@ -21,6 +21,7 @@
   <class type="rmcs_core::controller::chassis::ChassisTestV2Controller" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::chassis::ActiveSuspension" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::active_suspension::AdaptiveOmniDeformableChassis" base_class_type="rmcs_executor::Component" />
+  <class type="rmcs_core::controller::active_suspension::AdaptiveOmniImuAttitude" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::active_suspension::AdaptiveOmniJointSupportObserver" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::active_suspension::AdaptiveOmniContactEstimator" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::active_suspension::AdaptiveOmniActiveSuspension" base_class_type="rmcs_executor::Component" />
