@@ -2,6 +2,76 @@
 
 后续所有针对 `active_suspension` 目录的更新说明，统一追加到本文件中。
 
+## v0.3.3
+
+日期：2026-04-23
+
+### 本次更新
+
+#### 1. 将接地观测主路径从 ADRC `eso_z3` 解耦为独立支撑观测器
+
+问题：
+
+- `adaptive_omni_contact_estimator.cpp` 原先直接读取关节 ADRC 输出的：
+  - `/chassis/*_joint/eso_z3`
+- 而 ADRC 本身又依赖主动悬挂输出的：
+  - `/chassis/*_joint/target_angle`
+  - `/chassis/*_joint/torque_limit`
+- 在 active-suspension 测试配置里，这会形成执行器依赖环：
+
+```text
+AdaptiveOmniActiveSuspension
+  -> ADRC
+  -> AdaptiveOmniContactEstimator
+  -> AdaptiveOmniActiveSuspension
+```
+
+影响：
+
+- `rmcs_executor::Executor` 拓扑排序时会直接判定为循环依赖
+- 配置无法正常启动
+
+修复：
+
+- 新增独立组件：
+  - `adaptive_omni_joint_support_observer.cpp`
+- 该组件只读取硬件侧无环路信号：
+  - `/chassis/*_joint/physical_angle`
+  - `/chassis/*_joint/torque`
+- 输出新的独立观测 topic：
+  - `/chassis/*_joint/support_observer_z3`
+- `adaptive_omni_contact_estimator.cpp` 改为读取这些新 topic
+
+结果：
+
+- 接地估计不再依赖 ADRC 闭环输出
+- 主动悬挂测试配置的依赖图恢复为 DAG
+
+#### 2. 修正 `load_share` 和 `normal_force_estimate` 的输出语义
+
+问题：
+
+- `load_share` 之前实际是由 `support_score` 归一化得到
+- `/chassis/*_contact/normal_force_estimate` 之前实际发布的也是 `support_score`
+- 这会把“相对支撑大小”和“接地置信分数”混成一个量
+
+修复：
+
+- `load_share` 改为由 `support_proxy` 主路径归一化得到
+- 当独立 observer 暂不可用时，回退到 legacy 支撑代理量
+- `/chassis/*_contact/normal_force_estimate`
+- `/chassis/contact/normal_force_total`
+
+现在发布的是相对支撑估计本身，而不是 `[0, 1]` 的分数
+
+涉及文件：
+
+- `adaptive_omni_joint_support_observer.cpp`
+- `adaptive_omni_contact_estimator.cpp`
+- `plugins.xml`
+- `deformable-infantry-omni-active-suspension-test.yaml`
+- `tuning_guide.md`
+
 ## v0.3.2
 
 日期：2026-04-22

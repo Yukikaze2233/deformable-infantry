@@ -21,6 +21,7 @@ rmcs_executor:
       - rmcs_core::controller::pid::PidController -> bullet_feeder_velocity_pid_controller
 
       - rmcs_core::controller::active_suspension::AdaptiveOmniDeformableChassis -> adaptive_chassis_controller
+      - rmcs_core::controller::active_suspension::AdaptiveOmniJointSupportObserver -> adaptive_joint_support_observer
       - rmcs_core::controller::active_suspension::AdaptiveOmniContactEstimator -> adaptive_contact_estimator
       - rmcs_core::controller::active_suspension::AdaptiveOmniActiveSuspension -> adaptive_active_suspension
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
@@ -78,14 +79,22 @@ adaptive_chassis_controller:
     target_physical_velocity_limit: 180.0
     target_physical_acceleration_limit: 720.0
 
+adaptive_joint_support_observer:
+  ros__parameters:
+    dt: 0.001
+    b0: 0.60
+    eso_w0: 250.0
+    eso_auto_beta: true
+    eso_z3_limit: 1e9
+
 adaptive_contact_estimator:
   ros__parameters:
     wheel_radius: 0.055
     radius_base: 0.2341741
-    pivot_offset: 0.17389
-    body_length: 0.0853
-    body_width: 0.0853
-    arm_length: 0.155
+    pivot_offset: 0.0
+    body_length: 0.23276
+    body_width: 0.23276
+    arm_length: 0.140
     confidence_alpha: 0.15
     support_force_alpha: 0.20
     support_reference_rise_alpha: 0.05
@@ -115,12 +124,12 @@ adaptive_contact_estimator:
 adaptive_active_suspension:
   ros__parameters:
     radius_base: 0.2341741
-    pivot_offset: 0.17389
-    body_length: 0.0853
-    body_width: 0.0853
-    arm_length: 0.155
-    pivot_z: 0.14
-    wheel_bottom_offset: 0.055
+    pivot_offset: 0.0
+    body_length: 0.23276
+    body_width: 0.23276
+    arm_length: 0.140
+    pivot_z: 0.09341
+    wheel_bottom_offset: 0.100
     pitch_lever_arm: 0.165586
     roll_lever_arm: 0.165586
     min_angle: 20.0

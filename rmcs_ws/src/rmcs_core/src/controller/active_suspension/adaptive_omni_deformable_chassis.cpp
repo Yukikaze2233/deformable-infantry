@@ -151,6 +151,8 @@ public:
             last_switch_right_ = switch_right;
             last_switch_left_ = switch_left;
             last_keyboard_ = keyboard;
+            if (rotary_knob_.ready() && std::isfinite(*rotary_knob_))
+                last_rotary_knob_ = *rotary_knob_;
             return;
         }
 
