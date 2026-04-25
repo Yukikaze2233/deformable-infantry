@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+workspace_root="${repo_root}/rmcs_ws"
+source_db="${workspace_root}/build/compile_commands.json"
+target_db="${repo_root}/compile_commands.json"
+host_prefix_default="${repo_root}"
+build_prefix_default="/workspaces/RMCS"
+host_prefix="${1:-${RMCS_HOST_PATH:-${host_prefix_default}}}"
+build_prefix="${2:-${RMCS_BUILD_PATH:-${build_prefix_default}}}"
+
+if [[ ! -f "${source_db}" ]]; then
+    echo "> ERROR: Missing compile database: ${source_db}"
+    echo "> Run build-rmcs first, then retry."
+    exit 1
+fi
+
+if [[ ! -d "${host_prefix}/rmcs_ws" ]]; then
+    echo "> ERROR: Host workspace not found: ${host_prefix}/rmcs_ws"
+    exit 1
+fi
+
+python3 - "${source_db}" "${target_db}" "${build_prefix}" "${host_prefix}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source_path = Path(sys.argv[1])
+target_path = Path(sys.argv[2])
+build_prefix = sys.argv[3]
+host_prefix = sys.argv[4]
+
+with source_path.open() as file:
+    commands = json.load(file)
+
+def rewrite(value: str) -> str:
+    return value.replace(build_prefix, host_prefix)
+
+for entry in commands:
+    for key in ("directory", "command", "file", "output"):
+        if key in entry and isinstance(entry[key], str):
+            entry[key] = rewrite(entry[key])
+
+target_path.write_text(json.dumps(commands, indent=2) + "\n")
+PY
+
+echo "> Host clangd database generated: ${target_db}"
+echo "> Rewritten prefix: ${build_prefix} -> ${host_prefix}"
+

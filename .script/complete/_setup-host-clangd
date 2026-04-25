@@ -1,0 +1,4 @@
+#compdef setup-host-clangd
+
+_message "setup-host-clangd accepts optional host and build path prefixes"
+

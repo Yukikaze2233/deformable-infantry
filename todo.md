@@ -380,3 +380,232 @@ leg_force = gravity_force_per_wheel
     - `clang-format`
     - `git diff --check`
     - 静态代码检查
+
+## 最近一次整理：从 IMU 调平主线恢复到主动悬挂主线
+
+### 本轮目标
+
+- 保证 4 个车轮在不平地面上更容易持续接地
+- 让主线重新回到“每腿独立支撑/悬挂”而不是“只有 IMU 调平”
+- 把 IMU 调平从“直接改目标角”改成“支撑力偏置”
+- 为下一步接入接地估计和法向力均衡铺好接口
+
+### 本轮已修改文件
+
+- `rmcs_ws/src/rmcs_core/src/controller/chassis/deformable_chassis.cpp`
+- `rmcs_ws/src/rmcs_bringup/config/deformable-infantry-omni.yaml`
+
+### 本轮已完成修改
+
+#### 1. 将 `deformable_chassis.cpp` 主路径改回 suspension-first
+
+- 在 `run_joint_intent_pipeline_()` 中：
+  - 不再以 `apply_imu_attitude_correction_()` 作为主逻辑
+  - 改为调用 `update_active_suspension_(joint_feedback)`
+- 新主流程变成：
+  - 读取 joint feedback
+  - 更新 deploy target
+  - 更新 IMU 标定
+  - 每腿判断是否进入悬挂
+  - 每腿计算 support force
+  - 每腿输出 suspension torque
+  - 再统一走 joint target trajectory publish
+
+**效果 / 意义**
+- 主线控制语义从“姿态调平优先”改回“悬挂支撑优先”
+- IMU 不再直接取代悬挂逻辑
+
+#### 2. 增加按腿聚合的数据结构
+
+- 新增：
+  - `SuspensionPhase`
+  - `LegFeedback`
+  - `AttitudeBias`
+  - `LegControlState`
+- 新增静态查表：
+  - `kPitchSigns_`
+  - `kRollSigns_`
+
+**效果 / 意义**
+- 悬挂逻辑开始从“散落的四腿变量 + 条件分支”收口到“按腿遍历”的结构
+- 为后续加 `contact_confidence` / rebalance / force distribution 做准备
+
+#### 3. 恢复每腿独立支撑力模型
+
+- 新增函数：
+  - `leg_feedback_at_()`
+  - `compute_attitude_force_bias_()`
+  - `compute_leg_support_force_()`
+  - `leg_force_to_joint_torque_()`
+  - `update_leg_suspension_state_()`
+  - `update_active_suspension_()`
+- 当前每腿支撑力模型：
+
+```cpp
+leg_force = gravity_force_per_wheel
+         + active_suspension_Kz_ * (alpha - support_zero_angle)
+         + active_suspension_D_leg_ * alpha_dot
+         + pitch/roll force bias
+         + control_acceleration bias
+```
+
+- 力矩输出：
+
+```cpp
+tau = leg_force * rod_length * sin(alpha)
+```
+
+并做限幅。
+
+**效果 / 意义**
+- 主线重新具备了“每腿独立支撑 → 输出 suspension_torque”的悬挂基本形态
+- 不再只是“靠改四条腿角度来间接碰运气调平”
+
+#### 4. 将 IMU leveling 改成支撑力偏置
+
+- 旧语义：
+  - `pitch/roll -> 直接改 target_physical_angle`
+- 新语义：
+  - `pitch/roll -> 生成 AttitudeBias`
+  - 再按每腿的前后/左右符号加到 `leg_force`
+
+**效果 / 意义**
+- IMU leveling 现在是 suspension 的一部分
+- 而不是再次把主线退化成“只有姿态角修正”
+
+#### 5. 恢复 YAML 中的悬挂参数组
+
+- 在 `chassis_controller` 下补回：
+  - `active_suspension_mass`
+  - `active_suspension_rod_length`
+  - `active_suspension_Kz`
+  - `active_suspension_D_leg`
+  - `active_suspension_torque_limit`
+  - `active_suspension_gravity_comp_gain`
+  - `active_suspension_control_acceleration_limit`
+  - `active_suspension_preload_angle_deg`
+  - `active_suspension_entry_offset_deg`
+  - `active_suspension_ride_height_offset_deg`
+  - `active_suspension_hold_travel_deg`
+  - `active_suspension_activation_velocity_threshold_deg`
+
+**效果 / 意义**
+- 主线重新有了可调的 suspension geometry / dynamics 参数面板
+
+#### 6. 将四个 joint controller 的 ESO 输出接出来
+
+- 在 `lf/lb/rb/rf_joint_controller` 下新增：
+  - `eso_z2_output`
+  - `eso_z3_output`
+
+接口为：
+- `/chassis/left_front_joint/eso_z2`
+- `/chassis/left_front_joint/eso_z3`
+- `/chassis/left_back_joint/eso_z2`
+- `/chassis/left_back_joint/eso_z3`
+- `/chassis/right_back_joint/eso_z2`
+- `/chassis/right_back_joint/eso_z3`
+- `/chassis/right_front_joint/eso_z2`
+- `/chassis/right_front_joint/eso_z3`
+
+**效果 / 意义**
+- 先把接地估计所需的观测量暴露出来
+- 当前 chassis 还没读这些量，但下一步接 `contact_confidence` 会更顺
+
+### 当前实现的主要风险（本轮 Oracle 复核结论）
+
+#### 1. `update_active_suspension_()` 每周期先 `clear_suspension_outputs()`
+
+- 当前 `clear_suspension_outputs()` 不仅清输出，还会：
+  - `joint_suspension_active_.fill(false)`
+  - 把 `leg_control_states_` 的 `phase/support_force` 重置
+- 然后 `update_active_suspension_()` 再在同一周期内尝试重新激活
+
+**问题**
+- 这会让当前的 `SuspensionPhase` 更像“每周期即时判断”
+- 而不是“跨周期持续的状态机”
+- `kArming / kActive / kReleasing` 的语义被削弱了
+
+#### 2. release 行为现在还不是真正持久的状态机
+
+- 由于每周期先清掉 active 状态，`release_angle` 分支的实际意义被削弱
+- 当前更像是：每周期重新判断能不能 active
+
+**问题**
+- 这不利于后续做稳定的接管/退出/保持逻辑
+
+#### 3. `LegControlState` 现在只部分启用
+
+- `phase` 和 `support_force` 已有
+- `contact_confidence` 还没有真正参与控制
+
+**问题**
+- 当前数据结构方向是对的
+- 但真正的“状态持久化”和“接地估计输入”还没接上
+
+#### 4. `eso_z2/z3` 现在只是接出来，还没被 chassis 使用
+
+- 当前只完成了 YAML 接口暴露
+- `DeformableChassis` 还没有读这些输入
+
+**问题**
+- 当前还没有接地置信度闭环
+- 所以“4 轮持续接地”的能力仍然只完成了第一阶段恢复，不是最终版
+
+### 当前阶段性结论
+
+- 主线已经不再只是 IMU angle leveling
+- 主线已经恢复到“每腿独立支撑力 + suspension torque 输出 + IMU 作为力偏置”的第一版主动悬挂路径
+- 这是一个正确方向的恢复步骤
+- 当前最大问题已经不再是“有没有悬挂主路径”，而是：
+  - 悬挂状态机还不够持久
+  - 接地估计还没接入
+  - 法向力均衡还没开始做
+
+### 下一步明确任务
+
+#### 优先级最高
+
+1. 拆分“清输出”和“清内部状态”
+   - `clear_suspension_outputs()` 只负责本周期输出清零
+   - 不应每周期都顺带重置 `joint_suspension_active_` 和 `leg_control_states_`
+
+2. 让 `SuspensionPhase` 变成真正跨周期持久的状态机
+   - 明确：
+     - `kInactive`
+     - `kArming`
+     - `kActive`
+     - `kReleasing`
+   - 不再每周期从头判定一遍
+
+3. 在 `DeformableChassis` 中接入最小接地估计
+   - 读取：
+     - `eso_z3`
+     - joint torque
+     - physical velocity
+   - 先实现一个简单 `contact_confidence`
+
+#### 第二优先级
+
+4. 加 contact rebalance
+   - 让轻载/近悬空腿获得更多支撑偏置
+   - 让高负载腿适度卸载
+
+5. 验证 IMU force bias 是否真正改善姿态而不破坏 suspension
+
+#### 更后面的目标
+
+6. 做法向力均衡 / force distribution
+7. 后续如有必要，再拆出独立 `contact estimator` / `force distributor` 组件
+
+### 备注
+
+- 这一轮仍然没有完成真实编译验证
+- 当前环境问题：
+  - `build-rmcs` 不可用
+  - `colcon` 不在当前 shell PATH 中
+  - LSP 也缺 ROS/Eigen/YAML 运行环境
+- 所以这一轮的验证主要来自：
+  - 代码结构审查
+  - 控制流静态检查
+  - Oracle 复核

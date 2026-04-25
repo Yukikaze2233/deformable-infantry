@@ -65,6 +65,17 @@ build-rmcs
 
 构建完毕后，基于 `clangd` 的 `C++` 代码提示将可用。此时可以正常编写代码。
 
+如果你是在 **宿主机** 上直接用 `nvim`/`clangd` 打开仓库，而编译是在 devcontainer 内完成的，
+还需要额外执行一次：
+
+```bash
+setup-host-clangd
+```
+
+该脚本会把容器内生成的 `rmcs_ws/build/compile_commands.json` 路径前缀从
+`/workspaces/RMCS` 重写为当前宿主机仓库路径，并在仓库根生成 `compile_commands.json`，
+供宿主机上的 `clangd` 使用。
+
 Note: 用于开发的所有脚本均位于 `.script` 中，参见 开发脚本手册(TODO)。
 
 ### Step 5 (Optional)：运行

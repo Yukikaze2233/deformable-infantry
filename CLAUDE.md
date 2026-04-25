@@ -53,6 +53,7 @@ New components must be declared with `PLUGINLIB_EXPORT_CLASS` and registered in 
 
 Components share data through typed `OutputInterface<T>` / `InputInterface<T>` pointers registered by name (e.g. `/gimbal/yaw/control_velocity`). This is **not** ROS topic pub/sub — it is a direct shared-memory mechanism inside the executor. ROS topics are only used for external interfaces (referee serial, calibration subscriptions).
 
+
 ### Hardware Layer (`rmcs_core/src/hardware/`)
 
 Each robot type has one `.cpp` file. Inside it, inner classes (e.g. `FrontBoard`, `BackBoard`, `TopBoard`) privately inherit `librmcs::agent::CBoard` — one per physical USB control board. Each board class:
