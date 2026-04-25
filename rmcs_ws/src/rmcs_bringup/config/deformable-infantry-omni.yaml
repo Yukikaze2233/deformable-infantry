@@ -75,8 +75,12 @@ chassis_controller:
     # Suspension geometry / support model.
     active_suspension_mass: 22.5
     active_suspension_rod_length: 0.150
+    # @deprecated — kept for backward-compatible loading while the main path
+    # uses the Cartesian wheel-space parameters below.
     active_suspension_Kz: 150.0
     active_suspension_D_leg: 10.0
+    active_suspension_Kz_linear: 15000.0
+    active_suspension_D_leg_linear: 200.0
     active_suspension_torque_limit: 80.0
     active_suspension_gravity_comp_gain: 1.0
     active_suspension_control_acceleration_limit: 6.0

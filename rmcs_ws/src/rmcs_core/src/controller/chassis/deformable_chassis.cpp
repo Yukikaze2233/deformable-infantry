@@ -55,8 +55,15 @@ public:
     };
 
     struct AttitudeBias {
-        double pitch_force = 0.0;
-        double roll_force = 0.0;
+        std::array<double, kJointCount> leg_force{};
+    };
+
+    struct WheelCartesianState {
+        std::array<double, kJointCount> z{};
+        std::array<double, kJointCount> z_dot{};
+        double chassis_z = 0.0;
+        double chassis_pitch = 0.0;
+        double chassis_roll = 0.0;
     };
 
     struct LegControlState {
@@ -133,6 +140,9 @@ public:
         , active_suspension_roll_ki_(get_parameter_or("active_suspension_roll_ki", 0.0))
         , active_suspension_Dr_(get_parameter_or("active_suspension_Dr", 20.0))
         , active_suspension_D_leg_(get_parameter_or("active_suspension_D_leg", 10.0))
+        , active_suspension_Kz_linear_(get_parameter_or("active_suspension_Kz_linear", 15000.0))
+        , active_suspension_D_leg_linear_(get_parameter_or(
+              "active_suspension_D_leg_linear", 200.0))
         , active_suspension_com_height_(get_parameter_or("active_suspension_com_height", 0.15))
         , active_suspension_wheel_base_half_x_(get_parameter_or(
               "active_suspension_wheel_base_half_x", 0.2341741 / std::numbers::sqrt2))
@@ -829,31 +839,45 @@ private:
         }
     }
 
-    void compute_leg_support_intents_(const JointFeedbackFrame& joint_feedback,
-        const AttitudeBias& attitude_bias, double support_zero_angle, double ride_height_angle) {
+    WheelCartesianState compute_wheel_cartesian_state_(
+        const JointFeedbackFrame& joint_feedback) const {
+        WheelCartesianState state;
+        state.z.fill(nan_);
+        state.z_dot.fill(nan_);
+        state.chassis_z = nan_;
+        state.chassis_pitch = nan_;
+        state.chassis_roll = nan_;
+
         for (size_t index = 0; index < kJointCount; ++index) {
-            const LegFeedback leg_feedback = leg_feedback_at_(joint_feedback, index);
-            auto& leg_state = leg_control_states_[index];
-            if (leg_state.phase != SuspensionPhase::kActive) {
-                continue;
+            const double physical_angle = joint_feedback.physical_angles[index];
+            const double physical_velocity = joint_feedback.physical_velocities[index];
+            if (!std::isfinite(physical_angle) || !std::isfinite(physical_velocity)) {
+                return state;
             }
 
-            leg_state.support_force =
-                compute_leg_support_force_(index, leg_feedback, attitude_bias, support_zero_angle);
-            leg_commands_[index].final_target_angle = ride_height_angle;
-            leg_commands_[index].suspension_mode = true;
-            leg_commands_[index].suspension_torque =
-                leg_force_to_joint_torque_(leg_state.support_force, leg_feedback.physical_angle);
+            state.z[index] = -active_suspension_rod_length_ * std::cos(physical_angle);
+            state.z_dot[index] = active_suspension_rod_length_ * std::sin(physical_angle)
+                               * physical_velocity;
         }
-    }
 
-    void apply_leg_commands_to_targets_() {
-        for (size_t index = 0; index < kJointCount; ++index) {
-            current_target_physical_angles_rad_[index] = leg_commands_[index].final_target_angle;
-        }
+        const double z_front_avg = (state.z[kLeftFront] + state.z[kRightFront]) * 0.5;
+        const double z_back_avg = (state.z[kLeftBack] + state.z[kRightBack]) * 0.5;
+        const double z_left_avg = (state.z[kLeftFront] + state.z[kLeftBack]) * 0.5;
+        const double z_right_avg = (state.z[kRightFront] + state.z[kRightBack]) * 0.5;
+        const double half_x = std::max(active_suspension_wheel_base_half_x_, 1e-6);
+        const double half_y = std::max(active_suspension_wheel_base_half_y_, 1e-6);
+
+        double z_sum = 0.0;
+        for (size_t i = 0; i < kJointCount; ++i) z_sum += state.z[i];
+        state.chassis_z = z_sum / static_cast<double>(kJointCount);
+        state.chassis_pitch = (z_back_avg - z_front_avg) / (2.0 * half_x);
+        state.chassis_roll = (z_right_avg - z_left_avg) / (2.0 * half_y);
+        return state;
     }
 
     AttitudeBias compute_attitude_force_bias_() {
+        AttitudeBias bias;
+
         const double corrected_pitch = std::clamp(
             *chassis_imu_pitch_ - chassis_imu_pitch_offset_, -kMaxAttitudeRad_, kMaxAttitudeRad_);
         const double corrected_roll = std::clamp(
@@ -867,33 +891,85 @@ private:
         const double roll_force =
             roll_attitude_pid_.update(corrected_roll, -corrected_roll_rate, dt);
         if (!std::isfinite(pitch_force) || !std::isfinite(roll_force)) {
-            return {.pitch_force = nan_, .roll_force = nan_};
+            bias.leg_force.fill(nan_);
+            return bias;
         }
-        return {.pitch_force = pitch_force, .roll_force = roll_force};
+
+        for (size_t index = 0; index < kJointCount; ++index) {
+            bias.leg_force[index] =
+                kPitchSigns_[index] * pitch_force + kRollSigns_[index] * roll_force;
+        }
+        return bias;
     }
 
-    double compute_leg_support_force_(size_t index, const LegFeedback& leg_feedback,
-        const AttitudeBias& attitude_bias, double support_zero_angle) const {
+    void compute_cartesian_support_forces_(
+        std::array<double, kJointCount>& out_forces,
+        const WheelCartesianState& cartesian_state,
+        const AttitudeBias& attitude_bias, double z_ref) const {
+        for (size_t i = 0; i < kJointCount; ++i) {
+            if (!std::isfinite(cartesian_state.z[i])
+                || !std::isfinite(cartesian_state.z_dot[i])
+                || !std::isfinite(attitude_bias.leg_force[i])) {
+                out_forces.fill(nan_);
+                return;
+            }
+        }
+
         const double gravity_force_per_wheel = active_suspension_gravity_comp_gain_
                                              * active_suspension_mass_ * kGravity_
                                              / static_cast<double>(kJointCount);
-        double support_force = gravity_force_per_wheel
-                             + active_suspension_Kz_
-                                   * (leg_feedback.physical_angle - support_zero_angle)
-                             + active_suspension_D_leg_ * leg_feedback.physical_velocity;
 
-        support_force += kPitchSigns_[index] * attitude_bias.pitch_force;
-        support_force += kRollSigns_[index] * attitude_bias.roll_force;
-        if (active_suspension_com_height_ > 0.0 && active_suspension_wheel_base_half_x_ > 1e-6
-            && active_suspension_wheel_base_half_y_ > 1e-6) {
-            support_force += kPitchSigns_[index] * active_suspension_mass_
+        for (size_t index = 0; index < kJointCount; ++index) {
+            const double spring = active_suspension_Kz_linear_
+                                * (cartesian_state.z[index] - z_ref);
+            const double damping = active_suspension_D_leg_linear_
+                                 * cartesian_state.z_dot[index];
+
+            double accel_bias = 0.0;
+            if (active_suspension_com_height_ > 0.0 && active_suspension_wheel_base_half_x_ > 1e-6
+                && active_suspension_wheel_base_half_y_ > 1e-6) {
+                accel_bias = kPitchSigns_[index] * active_suspension_mass_
                            * control_acceleration_estimate_.x() * active_suspension_com_height_
                            / (4.0 * active_suspension_wheel_base_half_x_);
-            support_force += kRollSigns_[index] * active_suspension_mass_
-                           * control_acceleration_estimate_.y() * active_suspension_com_height_
-                           / (4.0 * active_suspension_wheel_base_half_y_);
+                accel_bias += kRollSigns_[index] * active_suspension_mass_
+                            * control_acceleration_estimate_.y() * active_suspension_com_height_
+                            / (4.0 * active_suspension_wheel_base_half_y_);
+            }
+
+            double force = gravity_force_per_wheel + spring + damping
+                         + attitude_bias.leg_force[index] + accel_bias;
+            out_forces[index] = std::max(force, 0.0);
         }
-        return std::max(support_force, 0.0);
+    }
+
+    void compute_leg_support_intents_(const JointFeedbackFrame& joint_feedback,
+        const AttitudeBias& attitude_bias, double z_ref, double ride_height_angle) {
+        const WheelCartesianState cartesian_state = compute_wheel_cartesian_state_(joint_feedback);
+        std::array<double, kJointCount> support_forces{};
+        compute_cartesian_support_forces_(support_forces, cartesian_state, attitude_bias, z_ref);
+
+        for (size_t index = 0; index < kJointCount; ++index) {
+            auto& leg_state = leg_control_states_[index];
+            if (leg_state.phase != SuspensionPhase::kActive) {
+                continue;
+            }
+            if (!std::isfinite(support_forces[index])
+                || !std::isfinite(joint_feedback.physical_angles[index])) {
+                continue;
+            }
+
+            leg_state.support_force = support_forces[index];
+            leg_commands_[index].final_target_angle = ride_height_angle;
+            leg_commands_[index].suspension_mode = true;
+            leg_commands_[index].suspension_torque = leg_force_to_joint_torque_(
+                leg_state.support_force, joint_feedback.physical_angles[index]);
+        }
+    }
+
+    void apply_leg_commands_to_targets_() {
+        for (size_t index = 0; index < kJointCount; ++index) {
+            current_target_physical_angles_rad_[index] = leg_commands_[index].final_target_angle;
+        }
     }
 
     double leg_force_to_joint_torque_(double leg_force, double physical_angle) const {
@@ -996,10 +1072,11 @@ private:
         const double entry_angle = deploy_angle + active_suspension_entry_offset_;
         const double ride_height_angle = std::clamp(
             deploy_angle + active_suspension_ride_height_offset_, deploy_angle, deg_to_rad(max_angle_));
-        const double support_zero_angle = deploy_angle - active_suspension_preload_angle_;
         const double release_angle = ride_height_angle + active_suspension_hold_travel_;
+        const double z_ref = -active_suspension_rod_length_
+                           * std::cos(deploy_angle - active_suspension_preload_angle_);
         const AttitudeBias attitude_bias = compute_attitude_force_bias_();
-        if (!std::isfinite(attitude_bias.pitch_force) || !std::isfinite(attitude_bias.roll_force)) {
+        if (!std::isfinite(attitude_bias.leg_force[0])) {
             reset_attitude_correction_state_();
             current_target_physical_angles_rad_.fill(deploy_angle);
             publish_suspension_outputs_();
@@ -1009,8 +1086,7 @@ private:
         const double dt = update_dt();
         update_leg_contact_estimates_(joint_feedback);
         update_leg_states_(joint_feedback, entry_angle, release_angle, dt);
-        compute_leg_support_intents_(
-            joint_feedback, attitude_bias, support_zero_angle, ride_height_angle);
+        compute_leg_support_intents_(joint_feedback, attitude_bias, z_ref, ride_height_angle);
         apply_leg_commands_to_targets_();
         publish_suspension_outputs_();
     }
@@ -1564,6 +1640,7 @@ private:
     bool active_suspension_enable_;
     double active_suspension_mass_;
     double active_suspension_rod_length_;
+    // @deprecated — kept for backward-compatible config loading.
     double active_suspension_Kz_;
     double active_suspension_Kp_;
     double active_suspension_pitch_ki_;
@@ -1571,7 +1648,10 @@ private:
     double active_suspension_Kr_;
     double active_suspension_roll_ki_;
     double active_suspension_Dr_;
+    // @deprecated — kept for backward-compatible config loading.
     double active_suspension_D_leg_;
+    double active_suspension_Kz_linear_;
+    double active_suspension_D_leg_linear_;
     double active_suspension_com_height_;
     double active_suspension_wheel_base_half_x_;
     double active_suspension_wheel_base_half_y_;
