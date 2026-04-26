@@ -1,5 +1,259 @@
 # Deformable Infantry Omni 悬挂调试记录
 
+## 2026-04-26（全天）：完整重构记录
+
+---
+
+### 一、主动悬挂公式推导与实现
+
+#### 1.1 问题诊断
+- **根因**：悬挂使用关节角度空间弹簧 `F = mg/4 + Kz*(α−α₀) + D*α_dot`，物理意义错误。
+  正确的弹簧应在车轮垂向位移空间建模。
+- **坐标系确认**：`z = -L·cos(α)`（α 为与竖直方向夹角，α=0 时连杆竖直向下）
+
+#### 1.2 公式推导（写在代码注释中）
+1. 运动学：`z_i(α_i) = -L·cos(α_i)`, `ż_i = L·sin(α_i)·α̇_i`
+2. Jacobian：`J_i = ∂z_i/∂α_i = L·sin(α_i)`
+3. Cartesian 虚拟阻抗：`F_i = mg/4·g_comp + K_lin·(z_i−z_ref) + D_lin·ż_i + bias`
+4. 预载模型：`z_ref = -L·cos(deploy − preload)` 替代旧 `α_support_zero`
+5. 力矩：`τ_i = clamp(F_i·L·sin(α_i), ±τ_limit)`
+
+#### 1.3 代码修改
+- **新增 `WheelCartesianState` 结构体**：`z[4]`, `z_dot[4]`, `chassis_z/pitch/roll`
+- **新增 `compute_wheel_cartesian_state_()`**：遍历 4 腿，计算 `z = -L·cos(α)`, `ż = L·sin(α)·α̇`，avg 得 chassis pose
+- **新增 `compute_cartesian_support_forces_()`**：Cartesian 力模型，每腿独立计算 spring+damping+gravity
+- **重写 `compute_leg_support_intents_()`**：调用 Cartesian 力模型，输出 suspension_torque
+- **重构 `AttitudeBias`**：`pitch_force/roll_force` 两标量 → `leg_force[4]` 数组
+- **重写 `compute_attitude_force_bias_()`**：PID 输出 × 符号表 → per-leg 力数组
+- **修改 `update_active_suspension_()`**：`z_ref = -L·cos(deploy−preload)` 替代旧 `support_zero_angle`
+
+#### 1.4 YAML 新增
+- `active_suspension_Kz_linear: 15000.0` (N/m)、`active_suspension_D_leg_linear: 200.0` (N·s/m)
+- 旧 `active_suspension_Kz: 150.0` / `D_leg: 10.0` 保留标记 deprecated
+
+#### 1.5 第一次部署失败——Eigen 模板初始化问题
+- **症状**：value_broadcaster 报错找不到 suspension_mode 输出、循环依赖 `deformable_infantry_command`、segfault
+- **根因**：`Eigen::Matrix<double,4,1>::Zero()` (expression template) 作为 struct 默认成员初始化器，在部署容器 Eigen 版本下触发内部断言，导致 DeformableChassis 构造失败
+- **修复**：全面移除 Eigen 类型
+  - `using LegVector = Eigen::Matrix<double,4,1>` → 删除
+  - `using SuspensionJacobian` / `SuspensionPseudoInverse` → 删除
+  - 所有 `.setConstant(nan_)` → `.fill(nan_)`
+  - `.mean()` → 手动 for 循环求和
+  - `LegVector::Zero()` → `std::array<double,4>{}`
+  - 几何 IMU 映射（Jacobian 伪逆）→ 回退到标量 PID × 符号表
+
+#### 1.6 弹簧符号修正
+- spring 项：`K_lin*(z_ref − z)` **错误** → `K_lin*(z − z_ref)` **正确**
+- damping 项：`D_lin*(−ż)` **错误** → `D_lin*ż` **正确**
+- 验证：`α=8°, preload=8°, L=0.15m` → `z=−0.1485, z_ref=−0.15, spring_term=+0.0015`（正值=预紧支撑力）✓
+
+---
+
+### 二、JointController 提取（从 chassis 剥离）
+
+#### 2.1 文件创建
+- `controller/chassis/joint/joint_controller.hpp` — 共享类型 + 公开 API
+- `controller/chassis/joint/joint_controller.cpp` — Pimpl 实现
+
+#### 2.2 职责分配
+**移入 JointController**：
+- 关节反馈读取/归一化
+- 持久状态机（Inactive→Arming→Active→Releasing）
+- 接地置信度估计（ESO z3 + torque + velocity）
+- Cartesian 运动学
+- IMU 力偏置
+- 支撑力计算
+- 关节力矩 `τ = F·L·sin(α)`
+- 目标轨迹生成
+
+**保留在 DeformableChassis**：
+- 模式管理（AUTO/SPIN/STEP_DOWN/LAUNCH_RAMP）
+- 速度控制 + 云台跟随
+- IMU 校准
+- Scope motor 控制
+- 全部 I/O 注册
+- 顶层管线 `run_joint_intent_pipeline_()`
+
+#### 2.3 关键技术选择
+- **Pimpl 模式**：内部状态隐藏在 .cpp，头文件零 ROS 依赖
+- **纯值传递**：`update(CycleInput)→CycleOutput`，全 POD 数组
+- **CMake 零改动**：`GLOB_RECURSE src/*.cpp` 自动拾取
+
+#### 2.4 命名演变
+- 初版：`JointCoordinator` → 用户反馈改为 `JointController`（注意同名冲突：已有 `DeformableJointController` 是 ADRC 伺服层，`JointController` 是 4 腿协调层）
+- 文件：`joint_coordinator.*` → `joint_controller.*`
+- 函数：`configure_joint_coordinator_()` → `configure_joint_controller_()`
+
+---
+
+### 三、Joint 模块重构——状态机驱动
+
+#### 3.1 新增 `JointState` 纯状态机
+**`controller/joint/joint_state.hpp`** (55 行)：
+- `JointIndex` enum（`kLeftFront=0, ..., kJointCount=4`）
+- `SuspensionPhase` enum class（`kInactive, kArming, kActive, kReleasing`）
+- `JointState` 类：
+  - `Config{entry_offset, ride_height_offset, hold_travel, velocity_threshold, min_arming_time, deploy_angle, max_angle}`
+  - `PerLegInput{physical_angle, physical_velocity, motor_angle, deploy_requested, contact_ready, dt}`
+  - `PerLegState{phase, active, phase_elapsed, contact_latched, requested_deploy}`
+  - `update(index, input, state)` — 单腿状态转换函数
+
+**`controller/joint/joint_state.cpp`** (86 行)：
+- Inactive→Arming→Active→Releasing 状态转换逻辑
+- 计时、contact_latched 管理、entry/velocity/contact 条件判断
+
+#### 3.2 重写 `JointController`
+**`joint_controller.hpp`**：
+- 删除 `LegControlState` 结构体（改用 `JointState::PerLegState`）
+- 删除 `contact_ready()` / `update_leg_states()` 方法（移至 JointState）
+- 新增 `JointState joint_state_` 成员
+- 成员变量：`std::array<JointState::PerLegState,4>` 替代 `std::array<LegControlState,4>`
+
+**`joint_controller.cpp`** — `update()` 重构流：
+1. 初始化检查
+2. 接触估计 `update_contact_estimates(input)`
+3. **状态机驱动**：遍历 4 腿 → `joint_state_.update(i, input, state)`
+4. 运动学 `compute_wheel_cartesian(angles, velocities)`
+5. IMU 力偏置 `compute_attitude_bias(input)`
+6. 支撑力 `compute_support_forces(ws, bias, z_ref, accel)`
+7. Active 腿：力→力矩 `force_to_torque()`
+8. 轨迹生成 `update_target_trajectory()`
+9. 打包输出 `CycleOutput`
+- 474 行 → 285 行
+
+#### 3.3 文件迁移到 `controller/joint/`
+```
+controller/joint/
+├── joint_state.hpp              [新] 纯状态机声明
+├── joint_state.cpp              [新] 状态转换实现
+├── joint_controller.hpp         [重写] 编排层
+├── joint_controller.cpp         [重写] 状态机驱动 update()
+├── deformable_joint_controller.cpp   [移] ADRC 低层伺服
+├── deformable_joint_sweep_controller.cpp  [移] 扫频控制
+└── deformable_joint_sweep_recorder.cpp    [移] 扫频记录
+```
+- `controller/chassis/joint/` 目录已删除
+- Chassis 中 include 路径：`"joint/joint_controller.hpp"` → `"controller/joint/joint_controller.hpp"`
+
+---
+
+### 四、Chassis 精简（deformable_chassis.cpp）
+
+#### 4.1 删除死代码
+| 删除项 | 行号 | 原因 |
+|---|---|---|
+| `wrap_deg()` | ~405-410 | 零调用点（原 Encoder 反馈路径用） |
+| `joint_angle_deg()` | ~426-431 | 零调用点 |
+| `JointFeedbackSource` enum | ~352 | omni 配置只有 MotorAngle 一种来源 |
+| `joint_feedback_source_` 成员 | ~897 | 同上 |
+| 构造函数中 offset 检查逻辑 | ~282-294 | 依赖已删除的 `joint_feedback_source_` |
+
+#### 4.2 简化函数
+- `validate_joint_feedback_inputs_()`：删除 Encoder 分支，仅检查 4 个 motor angle 接口 ready 状态
+
+#### 4.3 消除中间存储（~22 个成员变量）
+**`configure_joint_controller_()` 重写为直接从 YAML 加载**：
+- 原：读取成员变量 `active_suspension_rod_length_` 等 → 复制到 `Config` → `configure()`
+- 现：`cfg.rod_length = get_parameter_or("active_suspension_rod_length", 0.150)` → `configure()`
+
+**删除的成员变量**（仅作中间存储，无人读取）：
+- `active_suspension_mass_`, `active_suspension_rod_length_`
+- `active_suspension_Kp_`, `active_suspension_pitch_ki_`, `active_suspension_Dp_`
+- `active_suspension_Kr_`, `active_suspension_roll_ki_`, `active_suspension_Dr_`
+- `active_suspension_Kz_linear_`, `active_suspension_D_leg_linear_`
+- `active_suspension_com_height_`, `active_suspension_wheel_base_half_x_`, `_y_`
+- `active_suspension_gravity_comp_gain_`
+- `active_suspension_preload_angle_`, `active_suspension_entry_offset_`, `active_suspension_ride_height_offset_`, `active_suspension_hold_travel_`, `active_suspension_activation_velocity_threshold_`
+- `active_suspension_torque_limit_`
+- `active_suspension_pitch_angle_diff_limit_`, `active_suspension_roll_angle_diff_limit_`, `active_suspension_pid_integral_limit_`
+- `active_suspension_target_physical_velocity_limit_`, `active_suspension_target_physical_acceleration_limit_`
+
+**保留**（仍在别处使用）：
+- `active_suspension_enable_` — 悬挂开关判断
+- `active_suspension_control_acceleration_limit_` — 加速度估计限幅
+- `min_angle_`, `max_angle_` — 模式切换/lift target
+
+**构造器初始化列表同步精简**：删除对应 `get_parameter_or(...)` 行，~35 行 → ~4 行
+
+#### 4.4 命名统一（对齐 chassis_controller.cpp 风格）
+| 旧名 | 新名 | 位置 |
+|---|---|---|
+| `sw_r` | `switch_right` | `update()` |
+| `sw_l` | `switch_left` | `update()` |
+| `kb` | `keyboard` | `update()`, `update_translational_velocity_control()` |
+| `tv` | `translational_velocity` | `update_velocity_control()`, `update_control_acceleration_estimate()` |
+| `av` | `angular_velocity` | `update_angular_velocity_control()` |
+| `ca` | `chassis_control_angle` | `calculate_unsigned_chassis_angle_error()` |
+| `mv` | `keyboard_move` | `update_translational_velocity_control()` |
+| `sl`, `sr`, `kb` (形参) | `switch_left`, `switch_right`, `keyboard` | `update_mode_from_inputs_()`, `update_lift_target_toggle()` |
+| `coordinator_` | `joint_controller_` | 成员变量 + 3 处调用 |
+
+---
+
+### 五、YAML 精简
+
+#### 5.1 删除 deprecated 参数
+- `active_suspension_Kz: 150.0` — 已被 `Kz_linear` 替代 → 删除
+- `active_suspension_D_leg: 10.0` — 已被 `D_leg_linear` 替代 → 删除
+
+#### 5.2 ADRC 参数去重
+- **问题**：4 个关节控制器（`lf/lb/rb/rf_joint_controller`）各复制相同的 ADRC 参数块（~30 行×4 = 120 行）
+- **方案**：`/**` 通配符 + `adrc_` 前缀（避免与 wheel controller 的 `k1`/`k2` 冲突）
+- **YAML**：`/**` 块包含全部 ADRC 参数，4 关节自动继承
+- **C++**：`deformable_joint_controller.cpp` 全部参数名从 `"b0"` → `"adrc_b0"` 等
+- **结果**：383 行 → 290 行（-24%），4 关节零重复配置
+
+#### 5.3 `JointController::Config` 去默认值
+- 所有 30+ 字段从硬编码值（`= 0.150`、`= 15000.0` 等）→ 全部 `= 0`
+- 实际值由 `configure_joint_controller_()` 从 YAML 传递
+
+---
+
+### 六、构建问题
+
+#### 6.1 孤立的重复代码块
+- **位置**：`deformable_chassis.cpp` 第 614-621 行
+- **内容**：`update_control_acceleration_estimate()` 函数体的重复副本，悬挂在函数外
+- **影响**：孤立的 `}` 提前关闭 class scope，导致后续所有 `InputInterface`/`OutputInterface` 类型不识别
+- **修复**：删除 7 行重复代码
+
+#### 6.2 命名不一致
+- `coordinator_` 成员声明与 `joint_controller_.reset()` 调用冲突 → 统一为 `joint_controller_`
+
+---
+
+### 七、文档（deformable_infantry_docs）
+
+#### 7.1 结构
+```
+deformable_infantry_docs/
+├── typst/
+│   ├── main.typ
+│   ├── template/template.typ          (rmcs_notebook 同款)
+│   └── chapters/
+│       ├── lead-screw.typ             (82 行)  — v1 丝杆运动学
+│       ├── direct-drive.typ           (159 行) — v2 直驱 ADRC（MG5010E i36, η=36）
+│       ├── active-suspension.typ      (242 行) — 主动悬挂 + 层级图 + 数据流
+│       ├── steering-wheel.typ         (300 行) — 舵轮 + WheelDemo + QCP（对标 rmcs_notebook）
+│       └── omni-wheel.typ             (291 行) — 全向轮 + QCP + Cauch-Schwarz 凸性证明
+└── pdf/deformable_infantry.pdf        (672KB)
+```
+
+#### 7.2 内容要点
+- 首页：「南京理工大学 Alliance 战队 2026 变形步兵」
+- 字体：Libertinus Serif + Noto Serif CJK SC
+- 风格：复数向量 `iu`、`cases()`、`mat()`、Lagrangian、QCP 全推导
+- 修正：电机型号 DJI→瓴控 MG5010E i36、舵轮方案 DeformableWheel→WheelDemo（含关节融合 `R_i = R_base + L·cos(α_i)`）
+- 主动悬挂：分层箭号图 + 数据流图 + 5 项目标 + QCP 集成
+
+---
+
+---
+
+## 旧记录（保留）
+
+---
+
 ## 目标
 
 - 让腿先用正常闭环快速到 `min_angle`
@@ -607,5 +861,184 @@ tau = leg_force * rod_length * sin(alpha)
   - LSP 也缺 ROS/Eigen/YAML 运行环境
 - 所以这一轮的验证主要来自：
   - 代码结构审查
-  - 控制流静态检查
-  - Oracle 复核
+   - 控制流静态检查
+   - Oracle 复核
+
+---
+
+---
+
+## 2026-04-26：控制链路重构 —— Chassis / Suspension 职责拆分
+
+### 目标
+
+- **chassis 部分负责底盘，joint 部分负责关节**：将 `DeformableChassis` 中混合的底盘速度控制和关节悬挂逻辑拆分成两个独立组件
+- **YAML 传入参数**：悬挂参数从 `chassis_controller` 节迁移到独立 `suspension_controller` 节
+- **去掉冗余代码，精简框架**：`DeformableChassis` 从 953 行减至 408 行（-57%）
+- **有明确物理意义的变量全拼，便于阅读**：接口路径保留缩写，C++ 变量全拼
+- **命名参考 .clang-tidy 和 .clang-format**：`lower_case` 变量，`CamelCase` 类型，`kCamelCase` 常量
+
+### 步骤
+
+#### 1. 新建 `DeformableSuspensionController` 组件
+
+**文件**：
+- `controller/joint/deformable_suspension_controller.hpp`（179 行）
+- `controller/joint/deformable_suspension_controller.cpp`（618 行）
+
+**职责**（从 `DeformableChassis` 提取）：
+- 关节反馈读取与归一化（motor/physical angle、velocity、torque、encoder angle）
+- `JointController::update()` — 悬挂支撑力计算、姿态 PID、接触估计、状态机
+- IMU 标定（pitch/roll offset 估计）
+- 关节目标输出发布（target angle/velocity/acceleration、suspension mode/torque、control angle error、processed encoder angle）
+
+**输入**（通过 DAG 自动连线）：
+- 来自 `deformable_infantry`：4 组关节反馈 + IMU（pitch/roll/rate）
+- 来自 `chassis_controller`：`requested_angle`、`suspension/requested`、`control_acceleration/{x,y}`
+- 来自 `predefined_msg_provider`：`update_rate`
+
+**输出**（供下游消费）：
+- 4 组 `target_angle` / `target_physical_angle` / `target_physical_velocity` / `target_physical_acceleration`
+- 4 组 `suspension_mode` / `suspension_torque` / `control_angle_error`
+- `processed_encoder/angle`
+
+#### 2. 精简 `DeformableChassis` 为纯底盘速度控制器
+
+**文件**：`controller/chassis/deformable_chassis.cpp`（953 行 → 408 行）
+
+**保留**（底盘职责）：
+- 遥控/键盘输入处理
+- 模式切换（AUTO / SPIN / STEP_DOWN / LAUNCH_RAMP）
+- 速度控制（translational + angular）
+- 举升目标切换（symmetric / front_high / front_low）
+- Scope motor 控制
+- 控制加速度估计
+
+**新增输出**（供 `suspension_controller` 消费）：
+- `/chassis/left_front_joint/requested_angle` — 4 组 deploy target（degree）
+- `/chassis/suspension/requested` — bool
+- `/chassis/control_acceleration/x`、`/chassis/control_acceleration/y`
+
+**删除**（移至 `suspension_controller`）：
+- 全部关节反馈输入接口（~34 个）
+- 全部关节目标输出接口（~26 个）
+- `JointController` 成员及配置
+- 关节反馈验证、读取、归一化
+- IMU 标定逻辑
+- 悬挂输出发布逻辑
+
+#### 3. 更新 `plugins.xml`
+
+新增注册：
+```xml
+<class type="rmcs_core::controller::chassis::DeformableSuspensionController" base_class_type="rmcs_executor::Component" />
+```
+
+#### 4. 更新三个 deformable YAML 配置
+
+**`deformable-infantry-omni.yaml`**：
+- 新增 `suspension_controller` 组件到 DAG
+- `chassis_controller` 参数精简为 4 个：`minimum_angle`、`maximum_angle`、`active_suspension_enable`、`active_suspension_control_acceleration_limit`
+- 悬挂参数全部迁移到 `suspension_controller` 节
+
+**`deformable-infantry-v2.yaml`**：
+- 新增 `suspension_controller` 组件
+- 参数名 `min_angle`/`max_angle` → `minimum_angle`/`maximum_angle`
+- 移除 v2 旧参数（`active_suspension_spring_k`、`active_suspension_damping_k`、`active_suspension_airborne_torque_threshold`）
+
+**`deformable-infantry.yaml`**（legacy SMC）：
+- 新增 `suspension_controller` 组件
+- SMC 接口路径更新：`expect_velocity` → `target_physical_velocity`、`expect_acceleration` → `target_physical_acceleration`（共 12 处：4 SMC controller + 4 SMC observer）
+- `active_suspension_enable: false` 保持原有行为
+- 移除旧几何参数（`Rod_relative_*`、`Rod_length`）
+
+#### 5. 命名规范修正
+
+| 旧名 | 新名 | 文件 |
+|------|------|------|
+| `lf_angle_` / `lb_angle_` / ... | `left_front_joint_angle_` / `left_back_joint_angle_` / ... | suspension_controller |
+| `lf_current_target_angle_` | `left_front_deploy_target_degree_` | chassis |
+| `min_angle_` / `max_angle_` | `minimum_angle_degree_` / `maximum_angle_degree_` | both |
+| `inf_` | `kInfinity`（移除） — 使用 `kQuietNan` | both |
+| `mess_` | `mass_` | deformable_omni_wheel_controller |
+| `ca` / `tv` / `av` / `mv` | 展开为全拼 `chassis_control_angle` / `translational_velocity` / `angular_velocity` / `keyboard_move` | chassis |
+| `coordinator_` | `joint_controller_` | 已在上轮完成 |
+
+**规则**：
+- C++ 物理变量 → 全拼 snake_case（如 `left_front_joint_physical_angle_`）
+- YAML 接口路径 → 保留缩写（如 `/chassis/lf_joint/`）
+- 常量 → `kCamelCase`（如 `kQuietNan`、`kAngularVelocityMax`）
+- 成员后缀 `_` 保留
+
+#### 6. CMakeLists.txt — 零改动
+
+`GLOB_RECURSE src/*.cpp` 自动拾取新文件。
+
+#### 7. 编译验证
+
+```bash
+source /opt/ros/jazzy/setup.bash
+rm -rf build/rmcs_core install/rmcs_core
+colcon build --symlink-install --merge-install --packages-select rmcs_core
+```
+
+结果：✓ 通过（仅 1 个预存 warning：`joint_state.cpp` 未使用参数 `index`，非本次改动引入）
+
+LSP 诊断：✓ 所有修改文件无错误
+
+### 效果
+
+#### 架构清晰化
+
+```
+之前:
+  DeformableChassis (953 行)
+    ├── 底盘速度控制     ─┐
+    └── 关节悬挂逻辑     ─┘  职责混合
+
+之后:
+  DeformableChassis (408 行)        DeformableSuspensionController (618 行)
+    ├── 速度控制                        ├── JointController（悬挂力/姿态 PID）
+    ├── 模式切换                        ├── IMU 标定
+    ├── 举升目标切换                    ├── 接触估计
+    ├── → requested_angles              ├── 支撑力计算
+    └── → suspension_requested          └── → 关节目标输出（30+ 接口）
+```
+
+#### 新 DAG 数据流
+
+```
+deformable_infantry
+  → chassis_controller       (DeformableChassis)
+  → suspension_controller    (DeformableSuspensionController)  ← 新增
+  → deformable_chassis_controller
+
+chassis_controller
+  → suspension_controller    (requested_angles, suspension_requested, control_acceleration)
+
+suspension_controller
+  → lf/lb/rb/rf_joint_controller   (target angles, suspension mode/torque)
+```
+
+#### 代码量变化
+
+| 文件 | 前 | 后 | 变化 |
+|------|----|----|------|
+| `deformable_chassis.cpp` | 953 行 | 408 行 | -57% |
+| `deformable_suspension_controller.cpp` | — | 618 行 | 新建 |
+| `deformable_suspension_controller.hpp` | — | 179 行 | 新建 |
+| **合计（chassis 域）** | 953 行 | 1205 行（两文件） | 职责清晰化 |
+
+#### 三个配置统一
+
+| 配置 | 硬件 | 车轮控制器 | 关节控制器 | suspension_controller |
+|------|------|-----------|-----------|----------------------|
+| `deformable-infantry-omni.yaml` | DeformableInfantryOmni | DeformableOmniWheelController | DeformableJointController | ✓ |
+| `deformable-infantry-v2.yaml` | DeformableInfantryV2 | WheelDemoController | DeformableJointController | ✓ |
+| `deformable-infantry.yaml` | DeformableInfantry | DeformableChassisController | SMC ×4 | ✓ |
+
+### 已知限制
+
+1. `deformable-infantry-v2.yaml` 和 `deformable-infantry.yaml` 中旧 `min_angle`/`max_angle` 参数名需同时保留两份（新旧），否则回退到旧分支会不兼容
+2. 冗余文件（`deformable_wheel_controller.cpp`、`deformable-infantry.cpp`、`chassis_test.cpp`）暂未删除，`wheel-demo.cpp` 被 v2 使用
+3. 未做运行时功能验证——仅通过静态编译和 LSP 检查

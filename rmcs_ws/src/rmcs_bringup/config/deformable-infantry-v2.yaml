@@ -21,6 +21,7 @@ rmcs_executor:
       - rmcs_core::controller::pid::PidController -> bullet_feeder_velocity_pid_controller
 
       - rmcs_core::controller::chassis::DeformableChassis -> chassis_controller
+      - rmcs_core::controller::chassis::DeformableSuspensionController -> suspension_controller
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::WheelDemoController -> deformable_chassis_controller
 
@@ -64,16 +65,33 @@ deformable_infantry:
 
 chassis_controller:
   ros__parameters:
-    min_angle: 10.0
-    max_angle: 70.0
+    # Deploy geometry range (used for lift target toggle)
+    minimum_angle: 10.0
+    maximum_angle: 70.0
     active_suspension_enable: true
+    active_suspension_control_acceleration_limit: 6.0
+
+suspension_controller:
+  ros__parameters:
+    # Deploy geometry
+    minimum_angle: 10.0
+    maximum_angle: 70.0
+
+    # Suspension geometry / support model
     active_suspension_mass: 22.5
     active_suspension_rod_length: 0.150
-    active_suspension_spring_k: 150.0
-    active_suspension_damping_k: 10.0
+    active_suspension_Kz_linear: 150.0
+    active_suspension_D_leg_linear: 10.0
     active_suspension_gravity_comp_gain: 0.8
-    active_suspension_airborne_torque_threshold: 5.0
     active_suspension_torque_limit: 80.0
+
+    # Joint intent trajectory limits
+    target_physical_velocity_limit: 180.0
+    target_physical_acceleration_limit: 720.0
+
+    # IMU mounting-error calibration
+    chassis_imu_calibration_wait_s: 2.0
+    chassis_imu_calibration_sample_s: 3.0
 
 gimbal_controller:
   ros__parameters:

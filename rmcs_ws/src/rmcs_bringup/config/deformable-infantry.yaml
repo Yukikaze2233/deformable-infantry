@@ -32,6 +32,7 @@ rmcs_executor:
       - rmcs_core::controller::pid::PidController -> bullet_feeder_velocity_pid_controller
 
       - rmcs_core::controller::chassis::DeformableChassis -> chassis_controller
+      - rmcs_core::controller::chassis::DeformableSuspensionController -> suspension_controller
       # - rmcs_core::controller::chassis::ChassisTestController -> chassis_test_controller
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::DeformableChassisController -> deformable_chassis_controller
@@ -68,7 +69,7 @@ value_broadcaster:
       - /smc/smc_controller0/raw_control_torque
       - /smc/smc_controller0/sliding_surface_value
       - /chassis/left_front_joint/control_torque
-      - /chassis/left_back_joint/expect_velocity
+      - /chassis/left_back_joint/target_physical_velocity
       - /chassis/left_front_joint/velocity
       - /chassis/left_front_joint/control_angle_error
 deformable_infantry:
@@ -84,15 +85,35 @@ deformable_infantry:
 
 chassis_controller:
   ros__parameters:
-    min_angle: 12.5
-    max_angle: 42.0
+    # Deploy geometry range (used for lift target toggle)
+    minimum_angle: 12.5
+    maximum_angle: 42.0
+    active_suspension_enable: false
+
+suspension_controller:
+  ros__parameters:
+    minimum_angle: 12.5
+    maximum_angle: 42.0
     left_front_joint_offset: 257.501488
     left_back_joint_offset: 353.545434
     right_back_joint_offset: 7.591669
     right_front_joint_offset: 273.986725
-    Rod_relative_horizontal_coordinate: 5.0
-    Rod_relative_longitudinal_coordinate: 75.0
-    Rod_length: 80.0
+
+    # Suspension geometry / support model
+    active_suspension_mass: 22.5
+    active_suspension_rod_length: 0.080
+    active_suspension_Kz_linear: 15000.0
+    active_suspension_D_leg_linear: 200.0
+    active_suspension_gravity_comp_gain: 1.0
+    active_suspension_torque_limit: 80.0
+
+    # Joint intent trajectory limits
+    target_physical_velocity_limit: 180.0
+    target_physical_acceleration_limit: 720.0
+
+    # IMU calibration (not active since suspension disabled)
+    chassis_imu_calibration_wait_s: 2.0
+    chassis_imu_calibration_sample_s: 3.0
 
 gimbal_controller:
   ros__parameters:
@@ -192,8 +213,8 @@ smc_controller0:
     angle_error_deadzone: 1.1
     angle_error: /chassis/left_front_joint/control_angle_error
     current_velocity: /chassis/left_front_joint/velocity
-    target_velocity: /chassis/left_front_joint/expect_velocity
-    target_acceleration: /chassis/left_front_joint/expect_acceleration
+    target_velocity: /chassis/left_front_joint/target_physical_velocity
+    target_acceleration: /chassis/left_front_joint/target_physical_acceleration
     control_torque: /chassis/left_front_joint/control_torque
 
 smc_controller1:
@@ -209,8 +230,8 @@ smc_controller1:
     angle_error_deadzone: 1.1
     angle_error: /chassis/left_back_joint/control_angle_error
     current_velocity: /chassis/left_back_joint/velocity
-    target_velocity: /chassis/left_back_joint/expect_velocity
-    target_acceleration: /chassis/left_back_joint/expect_acceleration
+    target_velocity: /chassis/left_back_joint/target_physical_velocity
+    target_acceleration: /chassis/left_back_joint/target_physical_acceleration
     control_torque: /chassis/left_back_joint/control_torque
 
 smc_controller2:
@@ -226,8 +247,8 @@ smc_controller2:
     angle_error_deadzone: 1.1
     angle_error: /chassis/right_back_joint/control_angle_error
     current_velocity: /chassis/right_back_joint/velocity
-    target_velocity: /chassis/right_back_joint/expect_velocity
-    target_acceleration: /chassis/right_back_joint/expect_acceleration
+    target_velocity: /chassis/right_back_joint/target_physical_velocity
+    target_acceleration: /chassis/right_back_joint/target_physical_acceleration
     control_torque: /chassis/right_back_joint/control_torque
 
 smc_controller3:
@@ -243,8 +264,8 @@ smc_controller3:
     angle_error_deadzone: 1.1
     angle_error: /chassis/right_front_joint/control_angle_error
     current_velocity: /chassis/right_front_joint/velocity
-    target_velocity: /chassis/right_front_joint/expect_velocity
-    target_acceleration: /chassis/right_front_joint/expect_acceleration
+    target_velocity: /chassis/right_front_joint/target_physical_velocity
+    target_acceleration: /chassis/right_front_joint/target_physical_acceleration
     control_torque: /chassis/right_front_joint/control_torque
 
 smc_observer0:
@@ -253,8 +274,8 @@ smc_observer0:
     acceleration_limit: 3.0
     control_error: /chassis/left_front_joint/control_angle_error
     velocity: /chassis/left_front_joint/velocity
-    yaw_expect_velocity_: /chassis/left_front_joint/expect_velocity
-    yaw_expect_acceleration_: /chassis/left_front_joint/expect_acceleration
+    yaw_expect_velocity_: /chassis/left_front_joint/target_physical_velocity
+    yaw_expect_acceleration_: /chassis/left_front_joint/target_physical_acceleration
 
 smc_observer1:
   ros__parameters:
@@ -262,8 +283,8 @@ smc_observer1:
     acceleration_limit: 3.0
     control_error: /chassis/left_back_joint/control_angle_error
     velocity: /chassis/left_back_joint/velocity
-    yaw_expect_velocity_: /chassis/left_back_joint/expect_velocity
-    yaw_expect_acceleration_: /chassis/left_back_joint/expect_acceleration
+    yaw_expect_velocity_: /chassis/left_back_joint/target_physical_velocity
+    yaw_expect_acceleration_: /chassis/left_back_joint/target_physical_acceleration
 
 smc_observer2:
   ros__parameters:
@@ -271,8 +292,8 @@ smc_observer2:
     acceleration_limit: 3.0
     control_error: /chassis/right_back_joint/control_angle_error
     velocity: /chassis/right_back_joint/velocity
-    yaw_expect_velocity_: /chassis/right_back_joint/expect_velocity
-    yaw_expect_acceleration_: /chassis/right_back_joint/expect_acceleration
+    yaw_expect_velocity_: /chassis/right_back_joint/target_physical_velocity
+    yaw_expect_acceleration_: /chassis/right_back_joint/target_physical_acceleration
 
 smc_observer3:
   ros__parameters:
@@ -280,8 +301,8 @@ smc_observer3:
     acceleration_limit: 3.0
     control_error: /chassis/right_front_joint/control_angle_error
     velocity: /chassis/right_front_joint/velocity
-    yaw_expect_velocity_: /chassis/right_front_joint/expect_velocity
-    yaw_expect_acceleration_: /chassis/right_front_joint/expect_acceleration
+    yaw_expect_velocity_: /chassis/right_front_joint/target_physical_velocity
+    yaw_expect_acceleration_: /chassis/right_front_joint/target_physical_acceleration
 
 deformable_chassis_controller:
   ros__parameters:

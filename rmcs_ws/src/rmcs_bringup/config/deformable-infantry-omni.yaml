@@ -21,6 +21,7 @@ rmcs_executor:
       - rmcs_core::controller::pid::PidController -> bullet_feeder_velocity_pid_controller
 
       - rmcs_core::controller::chassis::DeformableChassis -> chassis_controller
+      - rmcs_core::controller::chassis::DeformableSuspensionController -> suspension_controller
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::DeformableOmniWheelController -> deformable_chassis_controller
 
@@ -67,31 +68,32 @@ deformable_infantry:
 
 chassis_controller:
   ros__parameters:
-    # Deploy geometry / chassis-owned joint intent
-    min_angle: 8.0
-    max_angle: 58.0
+    # Deploy geometry range (used for lift target toggle)
+    minimum_angle: 8.0
+    maximum_angle: 58.0
     active_suspension_enable: true
+    active_suspension_control_acceleration_limit: 6.0
 
-    # Suspension geometry / support model.
+suspension_controller:
+  ros__parameters:
+    # Deploy geometry
+    minimum_angle: 8.0
+    maximum_angle: 58.0
+
+    # Suspension geometry / support model
     active_suspension_mass: 22.5
     active_suspension_rod_length: 0.150
-    # @deprecated — kept for backward-compatible loading while the main path
-    # uses the Cartesian wheel-space parameters below.
-    active_suspension_Kz: 150.0
-    active_suspension_D_leg: 10.0
     active_suspension_Kz_linear: 15000.0
     active_suspension_D_leg_linear: 200.0
     active_suspension_torque_limit: 80.0
     active_suspension_gravity_comp_gain: 1.0
-    active_suspension_control_acceleration_limit: 6.0
     active_suspension_preload_angle_deg: 8.0
     active_suspension_entry_offset_deg: 1.5
     active_suspension_ride_height_offset_deg: 3.0
     active_suspension_hold_travel_deg: 5.0
     active_suspension_activation_velocity_threshold_deg: 15.0
 
-    # IMU attitude correction as suspension force bias.
-    # pitch < 0: front high. roll > 0: right high.
+    # IMU attitude correction as suspension force bias
     active_suspension_Kp: 8.0
     active_suspension_pitch_ki: 0.35
     active_suspension_Dp: 0.28
@@ -102,12 +104,13 @@ chassis_controller:
     active_suspension_roll_angle_diff_limit_deg: 45.0
     active_suspension_pid_integral_limit_deg: 20.0
 
-    # Chassis-owned joint intent trajectory limits while attitude correction is active.
+    # Joint intent trajectory limits
+    target_physical_velocity_limit: 180.0
+    target_physical_acceleration_limit: 720.0
     active_suspension_target_velocity_limit_deg: 80.0
     active_suspension_target_acceleration_limit_deg: 360.0
 
-    # Automatic IMU mounting-error calibration.
-    # When all four requested joint targets stay equal for 2s, average pitch/roll from 2s to 5s.
+    # IMU mounting-error calibration
     chassis_imu_calibration_wait_s: 2.0
     chassis_imu_calibration_sample_s: 3.0
 
@@ -208,9 +211,43 @@ deformable_chassis_controller:
     k2: 3.082190e-03
     no_load_power: 11.37
 
+# Shared ADRC parameters — applied to all 4 joint controllers via /** wildcard.
+# Prefixed with adrc_ to avoid collision with chassis wheel controller params.
+/**:
+  ros__parameters:
+    adrc_dt: 0.001
+    adrc_b0: -0.60
+    adrc_kt: 1.0
+    adrc_td_h: 0.001
+    adrc_td_r: 50.0
+    adrc_eso_w0: 250.0
+    adrc_eso_auto_beta: true
+    adrc_k1: 30.0
+    adrc_k2: 17.0
+    adrc_alpha1: 0.75
+    adrc_alpha2: 0.7
+    adrc_delta: 0.02
+    adrc_u_min: -200.0
+    adrc_u_max: 200.0
+    adrc_output_min: -200.0
+    adrc_output_max: 200.0
+    adrc_suspension_td_h: 0.001
+    adrc_suspension_td_r: 12.0
+    adrc_suspension_eso_w0: 80.0
+    adrc_suspension_k1: 6.0
+    adrc_suspension_k2: 3.0
+    adrc_suspension_alpha1: 0.75
+    adrc_suspension_alpha2: 0.7
+    adrc_suspension_delta: 0.02
+    adrc_suspension_u_min: -35.0
+    adrc_suspension_u_max: 35.0
+    adrc_suspension_output_min: -35.0
+    adrc_suspension_output_max: 35.0
+    adrc_torque_feedforward_gain: 0.0
+    adrc_suspension_torque_feedforward_gain: -1.0
+
 lf_joint_controller:
   ros__parameters:
-    # Joint-local servo inputs produced by chassis intent generation
     measurement_angle: /chassis/left_front_joint/physical_angle
     measurement_velocity: /chassis/left_front_joint/physical_velocity
     setpoint_angle: /chassis/left_front_joint/target_physical_angle
@@ -221,45 +258,8 @@ lf_joint_controller:
     eso_z2_output: /chassis/left_front_joint/eso_z2
     eso_z3_output: /chassis/left_front_joint/eso_z3
 
-    # Normal ADRC servo mode
-    dt: 0.001
-    b0: -0.60
-    kt: 1.0
-    td_h: 0.001
-    td_r: 50.0
-    eso_w0: 250.0
-    eso_auto_beta: true
-    k1: 30.0
-    k2: 17.0
-    alpha1: 0.75
-    alpha2: 0.7
-    delta: 0.02
-    u_min: -200.0
-    u_max: 200.0
-    output_min: -200.0
-    output_max: 200.0
-
-    # Suspension ADRC servo mode
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-
-    # Joint-local feedforward / limit shaping
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0
-
 lb_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
     measurement_angle: /chassis/left_back_joint/physical_angle
     measurement_velocity: /chassis/left_back_joint/physical_velocity
     setpoint_angle: /chassis/left_back_joint/target_physical_angle
@@ -269,40 +269,9 @@ lb_joint_controller:
     control: /chassis/left_back_joint/control_torque
     eso_z2_output: /chassis/left_back_joint/eso_z2
     eso_z3_output: /chassis/left_back_joint/eso_z3
-    dt: 0.001
-    b0: -0.60
-    kt: 1.0
-    td_h: 0.001
-    td_r: 50.0
-    eso_w0: 250.0
-    eso_auto_beta: true
-    k1: 30.0
-    k2: 17.0
-    alpha1: 0.75
-    alpha2: 0.7
-    delta: 0.02
-    u_min: -200.0
-    u_max: 200.0
-    output_min: -200.0
-    output_max: 200.0
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0
 
 rb_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
     measurement_angle: /chassis/right_back_joint/physical_angle
     measurement_velocity: /chassis/right_back_joint/physical_velocity
     setpoint_angle: /chassis/right_back_joint/target_physical_angle
@@ -312,40 +281,9 @@ rb_joint_controller:
     control: /chassis/right_back_joint/control_torque
     eso_z2_output: /chassis/right_back_joint/eso_z2
     eso_z3_output: /chassis/right_back_joint/eso_z3
-    dt: 0.001
-    b0: -0.60
-    kt: 1.0
-    td_h: 0.001
-    td_r: 50.0
-    eso_w0: 250.0
-    eso_auto_beta: true
-    k1: 30.0
-    k2: 17.0
-    alpha1: 0.75
-    alpha2: 0.7
-    delta: 0.02
-    u_min: -200.0
-    u_max: 200.0
-    output_min: -200.0
-    output_max: 200.0
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0
 
 rf_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
     measurement_angle: /chassis/right_front_joint/physical_angle
     measurement_velocity: /chassis/right_front_joint/physical_velocity
     setpoint_angle: /chassis/right_front_joint/target_physical_angle
@@ -355,33 +293,3 @@ rf_joint_controller:
     control: /chassis/right_front_joint/control_torque
     eso_z2_output: /chassis/right_front_joint/eso_z2
     eso_z3_output: /chassis/right_front_joint/eso_z3
-    dt: 0.001
-    b0: -0.60
-    kt: 1.0
-    td_h: 0.001
-    td_r: 50.0
-    eso_w0: 250.0
-    eso_auto_beta: true
-    k1: 30.0
-    k2: 17.0
-    alpha1: 0.75
-    alpha2: 0.7
-    delta: 0.02
-    u_min: -200.0
-    u_max: 200.0
-    output_min: -200.0
-    output_max: 200.0
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0

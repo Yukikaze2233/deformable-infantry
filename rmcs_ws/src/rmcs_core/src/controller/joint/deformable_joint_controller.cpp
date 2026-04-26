@@ -132,88 +132,88 @@ private:
     }
 
     void load_mode_configs_() {
-        dt_ = load_parameter_or(*this, "dt", 0.001);
-        b0_ = load_parameter_or(*this, "b0", 1.0);
-        kt_ = load_parameter_or(*this, "kt", 1.0);
+        dt_ = load_parameter_or(*this, "adrc_dt", 0.001);
+        b0_ = load_parameter_or(*this, "adrc_b0", 1.0);
+        kt_ = load_parameter_or(*this, "adrc_kt", 1.0);
 
-        normal_mode_config_.td.h = load_parameter_or(*this, "td_h", dt_);
-        normal_mode_config_.td.r = load_parameter_or(*this, "td_r", 300.0);
+        normal_mode_config_.td.h = load_parameter_or(*this, "adrc_td_h", dt_);
+        normal_mode_config_.td.r = load_parameter_or(*this, "adrc_td_r", 300.0);
         normal_mode_config_.td.max_vel =
-            load_parameter_or(*this, "td_max_vel", std::numeric_limits<double>::infinity());
+            load_parameter_or(*this, "adrc_td_max_vel", std::numeric_limits<double>::infinity());
         normal_mode_config_.td.max_acc =
-            load_parameter_or(*this, "td_max_acc", std::numeric_limits<double>::infinity());
+            load_parameter_or(*this, "adrc_td_max_acc", std::numeric_limits<double>::infinity());
 
         normal_mode_config_.eso.h = dt_;
         normal_mode_config_.eso.b0 = b0_;
-        normal_mode_config_.eso.w0 = load_parameter_or(*this, "eso_w0", 80.0);
-        normal_mode_config_.eso.auto_beta = load_parameter_or(*this, "eso_auto_beta", true);
+        normal_mode_config_.eso.w0 = load_parameter_or(*this, "adrc_eso_w0", 80.0);
+        normal_mode_config_.eso.auto_beta = load_parameter_or(*this, "adrc_eso_auto_beta", true);
         normal_mode_config_.eso.beta1 =
-            load_parameter_or(*this, "eso_beta1", 3.0 * normal_mode_config_.eso.w0);
+            load_parameter_or(*this, "adrc_eso_beta1", 3.0 * normal_mode_config_.eso.w0);
         normal_mode_config_.eso.beta2 = load_parameter_or(
-            *this, "eso_beta2", 3.0 * normal_mode_config_.eso.w0 * normal_mode_config_.eso.w0);
+            *this, "adrc_eso_beta2", 3.0 * normal_mode_config_.eso.w0 * normal_mode_config_.eso.w0);
         normal_mode_config_.eso.beta3 = load_parameter_or(
-            *this, "eso_beta3",
+            *this, "adrc_eso_beta3",
             normal_mode_config_.eso.w0 * normal_mode_config_.eso.w0 * normal_mode_config_.eso.w0);
-        normal_mode_config_.eso.z3_limit = load_parameter_or(*this, "eso_z3_limit", 1e9);
+        normal_mode_config_.eso.z3_limit = load_parameter_or(*this, "adrc_eso_z3_limit", 1e9);
 
-        normal_mode_config_.nlesf.k1 = load_parameter_or(*this, "k1", 50.0);
-        normal_mode_config_.nlesf.k2 = load_parameter_or(*this, "k2", 5.0);
-        normal_mode_config_.nlesf.alpha1 = load_parameter_or(*this, "alpha1", 0.75);
-        normal_mode_config_.nlesf.alpha2 = load_parameter_or(*this, "alpha2", 1.25);
-        normal_mode_config_.nlesf.delta = load_parameter_or(*this, "delta", 0.01);
+        normal_mode_config_.nlesf.k1 = load_parameter_or(*this, "adrc_k1", 50.0);
+        normal_mode_config_.nlesf.k2 = load_parameter_or(*this, "adrc_k2", 5.0);
+        normal_mode_config_.nlesf.alpha1 = load_parameter_or(*this, "adrc_alpha1", 0.75);
+        normal_mode_config_.nlesf.alpha2 = load_parameter_or(*this, "adrc_alpha2", 1.25);
+        normal_mode_config_.nlesf.delta = load_parameter_or(*this, "adrc_delta", 0.01);
         normal_mode_config_.nlesf.u_min =
-            load_parameter_or(*this, "u_min", -std::numeric_limits<double>::infinity());
+            load_parameter_or(*this, "adrc_u_min", -std::numeric_limits<double>::infinity());
         normal_mode_config_.nlesf.u_max =
-            load_parameter_or(*this, "u_max", std::numeric_limits<double>::infinity());
+            load_parameter_or(*this, "adrc_u_max", std::numeric_limits<double>::infinity());
         normal_mode_config_.output_min =
-            load_parameter_or(*this, "output_min", -std::numeric_limits<double>::infinity());
+            load_parameter_or(*this, "adrc_output_min", -std::numeric_limits<double>::infinity());
         normal_mode_config_.output_max =
-            load_parameter_or(*this, "output_max", std::numeric_limits<double>::infinity());
+            load_parameter_or(*this, "adrc_output_max", std::numeric_limits<double>::infinity());
         if (normal_mode_config_.output_min > normal_mode_config_.output_max) {
             std::swap(normal_mode_config_.output_min, normal_mode_config_.output_max);
         }
         normal_mode_config_.torque_feedforward_gain =
-            load_parameter_or(*this, "torque_feedforward_gain", 0.0);
+            load_parameter_or(*this, "adrc_torque_feedforward_gain", 0.0);
 
         suspension_mode_config_ = normal_mode_config_;
         suspension_mode_config_.td.h =
-            load_parameter_or(*this, "suspension_td_h", suspension_mode_config_.td.h);
+            load_parameter_or(*this, "adrc_suspension_td_h", suspension_mode_config_.td.h);
         suspension_mode_config_.td.r =
-            load_parameter_or(*this, "suspension_td_r", suspension_mode_config_.td.r);
+            load_parameter_or(*this, "adrc_suspension_td_r", suspension_mode_config_.td.r);
         suspension_mode_config_.td.max_vel =
-            load_parameter_or(*this, "suspension_td_max_vel", suspension_mode_config_.td.max_vel);
+            load_parameter_or(*this, "adrc_suspension_td_max_vel", suspension_mode_config_.td.max_vel);
         suspension_mode_config_.td.max_acc =
-            load_parameter_or(*this, "suspension_td_max_acc", suspension_mode_config_.td.max_acc);
+            load_parameter_or(*this, "adrc_suspension_td_max_acc", suspension_mode_config_.td.max_acc);
         suspension_mode_config_.eso.w0 =
-            load_parameter_or(*this, "suspension_eso_w0", suspension_mode_config_.eso.w0);
+            load_parameter_or(*this, "adrc_suspension_eso_w0", suspension_mode_config_.eso.w0);
         suspension_mode_config_.eso.auto_beta = load_parameter_or(
-            *this, "suspension_eso_auto_beta", suspension_mode_config_.eso.auto_beta);
+            *this, "adrc_suspension_eso_auto_beta", suspension_mode_config_.eso.auto_beta);
         suspension_mode_config_.eso.beta1 =
-            load_parameter_or(*this, "suspension_eso_beta1", suspension_mode_config_.eso.beta1);
+            load_parameter_or(*this, "adrc_suspension_eso_beta1", suspension_mode_config_.eso.beta1);
         suspension_mode_config_.eso.beta2 =
-            load_parameter_or(*this, "suspension_eso_beta2", suspension_mode_config_.eso.beta2);
+            load_parameter_or(*this, "adrc_suspension_eso_beta2", suspension_mode_config_.eso.beta2);
         suspension_mode_config_.eso.beta3 =
-            load_parameter_or(*this, "suspension_eso_beta3", suspension_mode_config_.eso.beta3);
+            load_parameter_or(*this, "adrc_suspension_eso_beta3", suspension_mode_config_.eso.beta3);
         suspension_mode_config_.eso.z3_limit = load_parameter_or(
-            *this, "suspension_eso_z3_limit", suspension_mode_config_.eso.z3_limit);
+            *this, "adrc_suspension_eso_z3_limit", suspension_mode_config_.eso.z3_limit);
         suspension_mode_config_.nlesf.k1 =
-            load_parameter_or(*this, "suspension_k1", suspension_mode_config_.nlesf.k1);
+            load_parameter_or(*this, "adrc_suspension_k1", suspension_mode_config_.nlesf.k1);
         suspension_mode_config_.nlesf.k2 =
-            load_parameter_or(*this, "suspension_k2", suspension_mode_config_.nlesf.k2);
+            load_parameter_or(*this, "adrc_suspension_k2", suspension_mode_config_.nlesf.k2);
         suspension_mode_config_.nlesf.alpha1 =
-            load_parameter_or(*this, "suspension_alpha1", suspension_mode_config_.nlesf.alpha1);
+            load_parameter_or(*this, "adrc_suspension_alpha1", suspension_mode_config_.nlesf.alpha1);
         suspension_mode_config_.nlesf.alpha2 =
-            load_parameter_or(*this, "suspension_alpha2", suspension_mode_config_.nlesf.alpha2);
+            load_parameter_or(*this, "adrc_suspension_alpha2", suspension_mode_config_.nlesf.alpha2);
         suspension_mode_config_.nlesf.delta =
-            load_parameter_or(*this, "suspension_delta", suspension_mode_config_.nlesf.delta);
+            load_parameter_or(*this, "adrc_suspension_delta", suspension_mode_config_.nlesf.delta);
         suspension_mode_config_.nlesf.u_min =
-            load_parameter_or(*this, "suspension_u_min", suspension_mode_config_.nlesf.u_min);
+            load_parameter_or(*this, "adrc_suspension_u_min", suspension_mode_config_.nlesf.u_min);
         suspension_mode_config_.nlesf.u_max =
-            load_parameter_or(*this, "suspension_u_max", suspension_mode_config_.nlesf.u_max);
+            load_parameter_or(*this, "adrc_suspension_u_max", suspension_mode_config_.nlesf.u_max);
         suspension_mode_config_.output_min =
-            load_parameter_or(*this, "suspension_output_min", normal_mode_config_.output_min);
+            load_parameter_or(*this, "adrc_suspension_output_min", normal_mode_config_.output_min);
         suspension_mode_config_.output_max =
-            load_parameter_or(*this, "suspension_output_max", normal_mode_config_.output_max);
+            load_parameter_or(*this, "adrc_suspension_output_max", normal_mode_config_.output_max);
         if (suspension_mode_config_.output_min > suspension_mode_config_.output_max) {
             std::swap(suspension_mode_config_.output_min, suspension_mode_config_.output_max);
         }
