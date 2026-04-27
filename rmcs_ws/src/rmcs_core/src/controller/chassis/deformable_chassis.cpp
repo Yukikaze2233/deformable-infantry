@@ -52,6 +52,7 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , following_velocity_controller_(10.0, 0.0, 0.0)
+        , spin_ratio_(std::clamp(get_parameter_or("spin_ratio", 0.6), 0.0, 1.0))
 
         , min_angle_(get_parameter_or("min_angle", 15.0))
         , max_angle_(get_parameter_or("max_angle", 55.0))
@@ -72,10 +73,6 @@ public:
         , active_suspension_mass_(get_parameter_or("active_suspension_mass", 22.5))
         , active_suspension_rod_length_(get_parameter_or("active_suspension_rod_length", 0.150))
         , active_suspension_Kz_(get_parameter_or("active_suspension_Kz", 150.0))
-        , active_suspension_Kp_(get_parameter_or("active_suspension_Kp", 200.0))
-        , active_suspension_Dp_(get_parameter_or("active_suspension_Dp", 20.0))
-        , active_suspension_Kr_(get_parameter_or("active_suspension_Kr", 200.0))
-        , active_suspension_Dr_(get_parameter_or("active_suspension_Dr", 20.0))
         , active_suspension_D_leg_(get_parameter_or("active_suspension_D_leg", 10.0))
         , active_suspension_com_height_(get_parameter_or("active_suspension_com_height", 0.15))
         , active_suspension_wheel_base_half_x_(get_parameter_or(
@@ -176,10 +173,6 @@ public:
             "/chassis/right_front_joint/encoder_angle", right_front_joint_encoder_angle_, false);
         register_input(
             "/chassis/right_back_joint/encoder_angle", right_back_joint_encoder_angle_, false);
-        register_input("/chassis/imu/pitch", chassis_imu_pitch_, false);
-        register_input("/chassis/imu/roll", chassis_imu_roll_, false);
-        register_input("/chassis/imu/pitch_rate", chassis_imu_pitch_rate_, false);
-        register_input("/chassis/imu/roll_rate", chassis_imu_roll_rate_, false);
 
         register_output("/gimbal/scope/control_torque", scope_motor_control_torque, nan_);
 
@@ -307,14 +300,6 @@ public:
             right_back_joint_torque_.make_and_bind_directly(0.0);
         if (!right_front_joint_torque_.ready())
             right_front_joint_torque_.make_and_bind_directly(0.0);
-        if (!chassis_imu_pitch_.ready())
-            chassis_imu_pitch_.make_and_bind_directly(0.0);
-        if (!chassis_imu_roll_.ready())
-            chassis_imu_roll_.make_and_bind_directly(0.0);
-        if (!chassis_imu_pitch_rate_.ready())
-            chassis_imu_pitch_rate_.make_and_bind_directly(0.0);
-        if (!chassis_imu_roll_rate_.ready())
-            chassis_imu_roll_rate_.make_and_bind_directly(0.0);
         validate_joint_feedback_inputs();
     }
 
@@ -556,7 +541,6 @@ private:
         (void)current_joint_torques;
 
         constexpr double gravity = 9.81;
-        constexpr double max_attitude = 30.0 * std::numbers::pi / 180.0;
         constexpr double min_force_arm_sin = 0.1;
         constexpr std::array<double, kJointCount> x_sign = {1.0, -1.0, -1.0, 1.0};
         constexpr std::array<double, kJointCount> y_sign = {1.0, 1.0, -1.0, -1.0};
@@ -582,13 +566,8 @@ private:
         const double gravity_force_per_wheel = active_suspension_gravity_comp_gain_
                                              * active_suspension_mass_ * gravity
                                              / static_cast<double>(kJointCount);
-        const double pitch = std::clamp(*chassis_imu_pitch_, -max_attitude, max_attitude);
-        const double roll = std::clamp(*chassis_imu_roll_, -max_attitude, max_attitude);
-        const double pitch_rate = *chassis_imu_pitch_rate_;
-        const double roll_rate = *chassis_imu_roll_rate_;
-
-        double pitch_force = active_suspension_Kp_ * pitch + active_suspension_Dp_ * pitch_rate;
-        double roll_force = active_suspension_Kr_ * roll + active_suspension_Dr_ * roll_rate;
+        double pitch_force = 0.0;
+        double roll_force = 0.0;
         if (active_suspension_com_height_ > 0.0 && active_suspension_wheel_base_half_x_ > 1e-6
             && active_suspension_wheel_base_half_y_ > 1e-6) {
             pitch_force += active_suspension_mass_ * control_acceleration_estimate_.x()
@@ -774,7 +753,7 @@ private:
 
         case rmcs_msgs::ChassisMode::SPIN: {
             angular_velocity =
-                0.6 * (spinning_forward_ ? angular_velocity_max_ : -angular_velocity_max_);
+                spin_ratio_ * (spinning_forward_ ? angular_velocity_max_ : -angular_velocity_max_);
             angular_velocity =
                 std::clamp(angular_velocity, -angular_velocity_max_, angular_velocity_max_);
         } break;
@@ -782,6 +761,7 @@ private:
         case rmcs_msgs::ChassisMode::STEP_DOWN: {
             double err = calculate_unsigned_chassis_angle_error(chassis_control_angle);
 
+            // In step-down mode, front/back can both be used for alignment.
             constexpr double alignment = std::numbers::pi;
             while (err > alignment / 2) {
                 chassis_control_angle -= alignment;
@@ -903,7 +883,7 @@ private:
     }
 
     void scope_motor_control(bool prone_override = false) {
-        const bool prone_target_active = prone_override || current_target_angle_ == min_angle_;
+        const bool prone_target_active = prone_override;
         if (prone_target_active && *mode_ != rmcs_msgs::ChassisMode::SPIN) {
             *scope_motor_control_torque = -0.3;
             // if (*scope_motor_velocity <= std::abs(0.1)){
@@ -1114,6 +1094,7 @@ private:
     bool spinning_forward_ = true;
     bool apply_symmetric_target = true;
     pid::PidCalculator following_velocity_controller_;
+    const double spin_ratio_;
 
     InputInterface<double> left_front_joint_angle_;
     InputInterface<double> left_back_joint_angle_;
@@ -1137,10 +1118,6 @@ private:
     InputInterface<double> left_back_joint_encoder_angle_;
     InputInterface<double> right_front_joint_encoder_angle_;
     InputInterface<double> right_back_joint_encoder_angle_;
-    InputInterface<double> chassis_imu_pitch_;
-    InputInterface<double> chassis_imu_roll_;
-    InputInterface<double> chassis_imu_pitch_rate_;
-    InputInterface<double> chassis_imu_roll_rate_;
 
     OutputInterface<double> scope_motor_control_torque;
 
@@ -1204,10 +1181,6 @@ private:
     double active_suspension_mass_;
     double active_suspension_rod_length_;
     double active_suspension_Kz_;
-    double active_suspension_Kp_;
-    double active_suspension_Dp_;
-    double active_suspension_Kr_;
-    double active_suspension_Dr_;
     double active_suspension_D_leg_;
     double active_suspension_com_height_;
     double active_suspension_wheel_base_half_x_;
