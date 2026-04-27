@@ -90,16 +90,6 @@ DeformableSuspensionController::DeformableSuspensionController()
     register_input(
         "/chassis/right_back_joint/encoder_angle", right_back_joint_encoder_angle_, false);
 
-    // ESO states (from joint controllers)
-    register_input("/chassis/left_front_joint/eso_z2", left_front_joint_eso_z2_, false);
-    register_input("/chassis/left_front_joint/eso_z3", left_front_joint_eso_z3_, false);
-    register_input("/chassis/left_back_joint/eso_z2", left_back_joint_eso_z2_, false);
-    register_input("/chassis/left_back_joint/eso_z3", left_back_joint_eso_z3_, false);
-    register_input("/chassis/right_back_joint/eso_z2", right_back_joint_eso_z2_, false);
-    register_input("/chassis/right_back_joint/eso_z3", right_back_joint_eso_z3_, false);
-    register_input("/chassis/right_front_joint/eso_z2", right_front_joint_eso_z2_, false);
-    register_input("/chassis/right_front_joint/eso_z3", right_front_joint_eso_z3_, false);
-
     // IMU
     register_input("/chassis/imu/pitch", chassis_imu_pitch_, false);
     register_input("/chassis/imu/roll", chassis_imu_roll_, false);
@@ -194,6 +184,15 @@ DeformableSuspensionController::DeformableSuspensionController()
 
     register_output("/chassis/processed_encoder/angle", processed_encoder_angle_, kQuietNan);
 
+    register_output(
+        "/chassis/left_front_joint/control_torque", left_front_joint_control_torque_, kQuietNan);
+    register_output(
+        "/chassis/left_back_joint/control_torque", left_back_joint_control_torque_, kQuietNan);
+    register_output(
+        "/chassis/right_back_joint/control_torque", right_back_joint_control_torque_, kQuietNan);
+    register_output(
+        "/chassis/right_front_joint/control_torque", right_front_joint_control_torque_, kQuietNan);
+
     // ---- Configure JointController ----
     JointController::Config config;
     config.rod_length            = get_parameter_or("active_suspension_rod_length", 0.150);
@@ -258,6 +257,81 @@ DeformableSuspensionController::DeformableSuspensionController()
             get_parameter_or("target_physical_acceleration_limit", 720.0)))), 1e-6);
 
     joint_controller_.configure(config);
+    configure_servos_();
+}
+
+void DeformableSuspensionController::configure_servos_() {
+    const double dt = std::max(get_parameter_or("adrc_dt", 0.001), 1e-9);
+    const double b0 = get_parameter_or("adrc_b0", 1.0);
+    const double kt = get_parameter_or("adrc_kt", 1.0);
+
+    JointServo::ModeConfig normal;
+    normal.td.h       = get_parameter_or("adrc_td_h", dt);
+    normal.td.r       = get_parameter_or("adrc_td_r", 300.0);
+    normal.td.max_vel = get_parameter_or("adrc_td_max_vel",
+        std::numeric_limits<double>::infinity());
+    normal.td.max_acc = get_parameter_or("adrc_td_max_acc",
+        std::numeric_limits<double>::infinity());
+    normal.eso.h         = dt;
+    normal.eso.b0        = b0;
+    normal.eso.w0        = get_parameter_or("adrc_eso_w0", 80.0);
+    normal.eso.auto_beta = get_parameter_or("adrc_eso_auto_beta", true);
+    normal.eso.beta1     = get_parameter_or("adrc_eso_beta1", 3.0 * normal.eso.w0);
+    normal.eso.beta2     = get_parameter_or("adrc_eso_beta2",
+        3.0 * normal.eso.w0 * normal.eso.w0);
+    normal.eso.beta3     = get_parameter_or("adrc_eso_beta3",
+        normal.eso.w0 * normal.eso.w0 * normal.eso.w0);
+    normal.eso.z3_limit  = get_parameter_or("adrc_eso_z3_limit", 1e9);
+    normal.nlesf.k1     = get_parameter_or("adrc_k1", 50.0);
+    normal.nlesf.k2     = get_parameter_or("adrc_k2", 5.0);
+    normal.nlesf.alpha1 = get_parameter_or("adrc_alpha1", 0.75);
+    normal.nlesf.alpha2 = get_parameter_or("adrc_alpha2", 1.25);
+    normal.nlesf.delta  = get_parameter_or("adrc_delta", 0.01);
+    normal.nlesf.u_min  = get_parameter_or("adrc_u_min",
+        -std::numeric_limits<double>::infinity());
+    normal.nlesf.u_max  = get_parameter_or("adrc_u_max",
+        std::numeric_limits<double>::infinity());
+    normal.output_min   = get_parameter_or("adrc_output_min",
+        -std::numeric_limits<double>::infinity());
+    normal.output_max   = get_parameter_or("adrc_output_max",
+        std::numeric_limits<double>::infinity());
+    if (normal.output_min > normal.output_max)
+        std::swap(normal.output_min, normal.output_max);
+    normal.torque_feedforward_gain = get_parameter_or("adrc_torque_feedforward_gain", 0.0);
+
+    JointServo::ModeConfig suspension = normal;
+    suspension.td.h       = get_parameter_or("adrc_suspension_td_h", suspension.td.h);
+    suspension.td.r       = get_parameter_or("adrc_suspension_td_r", suspension.td.r);
+    suspension.td.max_vel = get_parameter_or("adrc_suspension_td_max_vel", suspension.td.max_vel);
+    suspension.td.max_acc = get_parameter_or("adrc_suspension_td_max_acc", suspension.td.max_acc);
+    suspension.eso.w0        = get_parameter_or("adrc_suspension_eso_w0", suspension.eso.w0);
+    suspension.eso.auto_beta = get_parameter_or("adrc_suspension_eso_auto_beta",
+        suspension.eso.auto_beta);
+    suspension.eso.beta1     = get_parameter_or("adrc_suspension_eso_beta1", suspension.eso.beta1);
+    suspension.eso.beta2     = get_parameter_or("adrc_suspension_eso_beta2", suspension.eso.beta2);
+    suspension.eso.beta3     = get_parameter_or("adrc_suspension_eso_beta3", suspension.eso.beta3);
+    suspension.eso.z3_limit  = get_parameter_or("adrc_suspension_eso_z3_limit",
+        suspension.eso.z3_limit);
+    suspension.nlesf.k1     = get_parameter_or("adrc_suspension_k1", suspension.nlesf.k1);
+    suspension.nlesf.k2     = get_parameter_or("adrc_suspension_k2", suspension.nlesf.k2);
+    suspension.nlesf.alpha1 = get_parameter_or("adrc_suspension_alpha1",
+        suspension.nlesf.alpha1);
+    suspension.nlesf.alpha2 = get_parameter_or("adrc_suspension_alpha2",
+        suspension.nlesf.alpha2);
+    suspension.nlesf.delta  = get_parameter_or("adrc_suspension_delta", suspension.nlesf.delta);
+    suspension.nlesf.u_min  = get_parameter_or("adrc_suspension_u_min", suspension.nlesf.u_min);
+    suspension.nlesf.u_max  = get_parameter_or("adrc_suspension_u_max", suspension.nlesf.u_max);
+    suspension.output_min   = get_parameter_or("adrc_suspension_output_min",
+        normal.output_min);
+    suspension.output_max   = get_parameter_or("adrc_suspension_output_max",
+        normal.output_max);
+    if (suspension.output_min > suspension.output_max)
+        std::swap(suspension.output_min, suspension.output_max);
+    suspension.torque_feedforward_gain = get_parameter_or(
+        "adrc_suspension_torque_feedforward_gain", -1.0);
+
+    for (auto& servo : servos_)
+        servo.configure(dt, b0, kt, normal, suspension);
 }
 
 void DeformableSuspensionController::before_updating() {
@@ -312,6 +386,12 @@ void DeformableSuspensionController::update() {
     for (double angle : cycle_input.physical_angles)
         if (!std::isfinite(angle)) { publish_nan_joint_targets_(); return; }
 
+    // Feed previous-cycle ESO z3 into contact estimation
+    for (size_t i = 0; i < kJointCount; ++i) {
+        cycle_input.eso_z2[i] = 0.0;
+        cycle_input.eso_z3[i] = last_eso_z3_[i];
+    }
+
     update_imu_calibration_();
 
     clear_suspension_outputs_();
@@ -319,11 +399,38 @@ void DeformableSuspensionController::update() {
 
     publish_suspension_outputs_(output);
     publish_joint_targets_(output, cycle_input.physical_angles);
+
+    // Run per-leg ADRC servos with suspension outputs
+    const std::array<OutputInterface<double>*, kJointCount> torque_outputs{
+        &left_front_joint_control_torque_,
+        &left_back_joint_control_torque_,
+        &right_back_joint_control_torque_,
+        &right_front_joint_control_torque_,
+    };
+    for (size_t i = 0; i < kJointCount; ++i) {
+        JointServo::Input servo_in;
+        servo_in.measurement_angle  = cycle_input.physical_angles[i];
+        servo_in.setpoint_angle     = output.final_target_angles[i];
+        servo_in.feedforward_torque = output.suspension_torque[i];
+        servo_in.suspension_mode    = output.suspension_mode[i];
+
+        JointServo::Output servo_out;
+        if (servos_[i].update(servo_in, servo_out)) {
+            **torque_outputs[i] = servo_out.control_torque;
+            last_eso_z3_[i]    = servo_out.eso_z3;
+        } else {
+            **torque_outputs[i] = kQuietNan;
+        }
+    }
 }
 
 void DeformableSuspensionController::reset() {
     reset_imu_calibration_();
     joint_controller_.reset();
+    for (auto& servo : servos_) {
+        servo.reset(0.0, 0.0);
+    }
+    last_eso_z3_.fill(0.0);
     publish_nan_joint_targets_();
 }
 
@@ -375,12 +482,6 @@ void DeformableSuspensionController::read_joint_feedback_(
     const std::array<const InputInterface<double>*, kJointCount> torque_inputs{
         &left_front_joint_torque_, &left_back_joint_torque_,
         &right_back_joint_torque_, &right_front_joint_torque_};
-    const std::array<const InputInterface<double>*, kJointCount> z2_inputs{
-        &left_front_joint_eso_z2_, &left_back_joint_eso_z2_,
-        &right_back_joint_eso_z2_, &right_front_joint_eso_z2_};
-    const std::array<const InputInterface<double>*, kJointCount> z3_inputs{
-        &left_front_joint_eso_z3_, &left_back_joint_eso_z3_,
-        &right_back_joint_eso_z3_, &right_front_joint_eso_z3_};
 
     for (size_t i = 0; i < kJointCount; ++i) {
         if (joint_feedback_source_ == JointFeedbackSource::kMotorAngle
@@ -403,10 +504,6 @@ void DeformableSuspensionController::read_joint_feedback_(
             output.physical_velocities[i] = *(*velocity_inputs[i]);
         if (torque_inputs[i]->ready() && std::isfinite(*(*torque_inputs[i])))
             output.joint_torques[i] = *(*torque_inputs[i]);
-        if (z2_inputs[i]->ready() && std::isfinite(*(*z2_inputs[i])))
-            output.eso_z2[i] = *(*z2_inputs[i]);
-        if (z3_inputs[i]->ready() && std::isfinite(*(*z3_inputs[i])))
-            output.eso_z3[i] = *(*z3_inputs[i]);
     }
 }
 
@@ -566,6 +663,10 @@ void DeformableSuspensionController::publish_nan_joint_targets_() {
     *right_back_joint_control_angle_error_ = kQuietNan;
     *right_front_joint_control_angle_error_= kQuietNan;
     *processed_encoder_angle_ = kQuietNan;
+    *left_front_joint_control_torque_  = kQuietNan;
+    *left_back_joint_control_torque_   = kQuietNan;
+    *right_back_joint_control_torque_  = kQuietNan;
+    *right_front_joint_control_torque_ = kQuietNan;
 }
 
 // -----------------------------------------------------------------------

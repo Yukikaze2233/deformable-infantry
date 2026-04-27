@@ -25,11 +25,6 @@ rmcs_executor:
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::DeformableOmniWheelController -> deformable_chassis_controller
 
-      - rmcs_core::controller::chassis::DeformableJointController -> lf_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> lb_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> rb_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> rf_joint_controller
-
       - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
 
 value_broadcaster:
@@ -39,18 +34,6 @@ value_broadcaster:
       - /chassis/left_back_joint/torque
       - /chassis/right_front_joint/torque
       - /chassis/right_back_joint/torque
-      - /chassis/left_front_joint/suspension_mode
-      - /chassis/left_back_joint/suspension_mode
-      - /chassis/right_front_joint/suspension_mode
-      - /chassis/right_back_joint/suspension_mode
-      - /chassis/left_front_joint/suspension_torque
-      - /chassis/left_back_joint/suspension_torque
-      - /chassis/right_front_joint/suspension_torque
-      - /chassis/right_back_joint/suspension_torque
-      - /chassis/left_front_joint/control_torque
-      - /chassis/left_back_joint/control_torque
-      - /chassis/right_front_joint/control_torque
-      - /chassis/right_back_joint/control_torque
 
 deformable_infantry:
   ros__parameters:
@@ -211,8 +194,7 @@ deformable_chassis_controller:
     k2: 3.082190e-03
     no_load_power: 11.37
 
-# Shared ADRC parameters — applied to all 4 joint controllers via /** wildcard.
-# Prefixed with adrc_ to avoid collision with chassis wheel controller params.
+# Shared ADRC parameters — applied to suspension_controller via /** wildcard.
 /**:
   ros__parameters:
     adrc_dt: 0.001
@@ -232,64 +214,16 @@ deformable_chassis_controller:
     adrc_output_min: -200.0
     adrc_output_max: 200.0
     adrc_suspension_td_h: 0.001
-    adrc_suspension_td_r: 12.0
-    adrc_suspension_eso_w0: 80.0
-    adrc_suspension_k1: 6.0
-    adrc_suspension_k2: 3.0
+    adrc_suspension_td_r: 50.0
+    adrc_suspension_eso_w0: 250.0
+    adrc_suspension_k1: 30.0
+    adrc_suspension_k2: 17.0
     adrc_suspension_alpha1: 0.75
     adrc_suspension_alpha2: 0.7
     adrc_suspension_delta: 0.02
-    adrc_suspension_u_min: -35.0
-    adrc_suspension_u_max: 35.0
-    adrc_suspension_output_min: -35.0
-    adrc_suspension_output_max: 35.0
+    adrc_suspension_u_min: -200.0
+    adrc_suspension_u_max: 200.0
+    adrc_suspension_output_min: -200.0
+    adrc_suspension_output_max: 200.0
     adrc_torque_feedforward_gain: 0.0
     adrc_suspension_torque_feedforward_gain: -1.0
-
-lf_joint_controller:
-  ros__parameters:
-    measurement_angle: /chassis/left_front_joint/physical_angle
-    measurement_velocity: /chassis/left_front_joint/physical_velocity
-    setpoint_angle: /chassis/left_front_joint/target_physical_angle
-    setpoint_velocity: /chassis/left_front_joint/target_physical_velocity
-    mode_input: /chassis/left_front_joint/suspension_mode
-    suspension_torque: /chassis/left_front_joint/suspension_torque
-    control: /chassis/left_front_joint/control_torque
-    eso_z2_output: /chassis/left_front_joint/eso_z2
-    eso_z3_output: /chassis/left_front_joint/eso_z3
-
-lb_joint_controller:
-  ros__parameters:
-    measurement_angle: /chassis/left_back_joint/physical_angle
-    measurement_velocity: /chassis/left_back_joint/physical_velocity
-    setpoint_angle: /chassis/left_back_joint/target_physical_angle
-    setpoint_velocity: /chassis/left_back_joint/target_physical_velocity
-    mode_input: /chassis/left_back_joint/suspension_mode
-    suspension_torque: /chassis/left_back_joint/suspension_torque
-    control: /chassis/left_back_joint/control_torque
-    eso_z2_output: /chassis/left_back_joint/eso_z2
-    eso_z3_output: /chassis/left_back_joint/eso_z3
-
-rb_joint_controller:
-  ros__parameters:
-    measurement_angle: /chassis/right_back_joint/physical_angle
-    measurement_velocity: /chassis/right_back_joint/physical_velocity
-    setpoint_angle: /chassis/right_back_joint/target_physical_angle
-    setpoint_velocity: /chassis/right_back_joint/target_physical_velocity
-    mode_input: /chassis/right_back_joint/suspension_mode
-    suspension_torque: /chassis/right_back_joint/suspension_torque
-    control: /chassis/right_back_joint/control_torque
-    eso_z2_output: /chassis/right_back_joint/eso_z2
-    eso_z3_output: /chassis/right_back_joint/eso_z3
-
-rf_joint_controller:
-  ros__parameters:
-    measurement_angle: /chassis/right_front_joint/physical_angle
-    measurement_velocity: /chassis/right_front_joint/physical_velocity
-    setpoint_angle: /chassis/right_front_joint/target_physical_angle
-    setpoint_velocity: /chassis/right_front_joint/target_physical_velocity
-    mode_input: /chassis/right_front_joint/suspension_mode
-    suspension_torque: /chassis/right_front_joint/suspension_torque
-    control: /chassis/right_front_joint/control_torque
-    eso_z2_output: /chassis/right_front_joint/eso_z2
-    eso_z3_output: /chassis/right_front_joint/eso_z3

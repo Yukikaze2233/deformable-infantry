@@ -11,6 +11,7 @@
 #include <rmcs_msgs/keyboard.hpp>
 
 #include "controller/joint/joint_controller.hpp"
+#include "controller/joint/joint_servo.hpp"
 
 namespace rmcs_core::controller::chassis {
 
@@ -37,6 +38,7 @@ private:
 
     // ---- Output publishing ----
     void clear_suspension_outputs_();
+    void configure_servos_();
     void publish_suspension_outputs_(const JointController::CycleOutput& out);
     void publish_joint_targets_(
         const JointController::CycleOutput& out,
@@ -61,6 +63,10 @@ private:
 
     // ---- Core ----
     JointController joint_controller_;
+
+    // ---- Per-leg ADRC servos (was DeformableJointController ×4) ----
+    std::array<JointServo, kJointCount> servos_;
+    std::array<double, kJointCount> last_eso_z3_{};
 
     // ---- Joint feedback input interfaces ----
     InputInterface<double> left_front_joint_angle_;
@@ -87,16 +93,6 @@ private:
     InputInterface<double> left_back_joint_encoder_angle_;
     InputInterface<double> right_back_joint_encoder_angle_;
     InputInterface<double> right_front_joint_encoder_angle_;
-
-    InputInterface<double> left_front_joint_eso_z2_;
-    InputInterface<double> left_back_joint_eso_z2_;
-    InputInterface<double> right_back_joint_eso_z2_;
-    InputInterface<double> right_front_joint_eso_z2_;
-
-    InputInterface<double> left_front_joint_eso_z3_;
-    InputInterface<double> left_back_joint_eso_z3_;
-    InputInterface<double> right_back_joint_eso_z3_;
-    InputInterface<double> right_front_joint_eso_z3_;
 
     InputInterface<double> chassis_imu_pitch_;
     InputInterface<double> chassis_imu_roll_;
@@ -150,6 +146,12 @@ private:
     OutputInterface<double> right_front_joint_control_angle_error_;
 
     OutputInterface<double> processed_encoder_angle_;
+
+    // ---- ADRC servo outputs (consumed by deformable_infantry_command motors) ----
+    OutputInterface<double> left_front_joint_control_torque_;
+    OutputInterface<double> left_back_joint_control_torque_;
+    OutputInterface<double> right_back_joint_control_torque_;
+    OutputInterface<double> right_front_joint_control_torque_;
 
     // ---- Parameters ----
     double minimum_angle_degree_;
