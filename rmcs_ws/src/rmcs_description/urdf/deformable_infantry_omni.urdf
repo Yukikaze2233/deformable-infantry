@@ -1,0 +1,629 @@
+<?xml version="1.0"?>
+<robot name="deformable_infantry_omni">
+
+  <!--
+    Isaac Sim focused URDF:
+      - simplified collisions
+      - explicit inertials
+      - lift joints rotate wheel modules downward for positive angle
+      - lower lift limit is widened to 0.0 for startup stability
+  -->
+
+  <material name="carbon">
+    <color rgba="0.18 0.18 0.20 1" />
+  </material>
+  <material name="metal">
+    <color rgba="0.72 0.74 0.78 1" />
+  </material>
+  <material name="rubber">
+    <color rgba="0.08 0.08 0.08 1" />
+  </material>
+  <material name="blue">
+    <color rgba="0.15 0.28 0.62 1" />
+  </material>
+  <material name="gold">
+    <color rgba="0.78 0.64 0.28 1" />
+  </material>
+
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0.055" rpy="0 0 0" />
+      <mass value="20.0" />
+      <inertia ixx="0.110" ixy="0.0" ixz="0.0" iyy="0.110" iyz="0.0" izz="0.181" />
+    </inertial>
+
+    <collision>
+      <origin xyz="0 0 0.050" rpy="0 0 0" />
+      <geometry>
+        <box size="0.23276 0.23276 0.080" />
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0 0 0.102" rpy="0 0 0" />
+      <geometry>
+        <box size="0.19276 0.19276 0.040" />
+      </geometry>
+    </collision>
+
+    <visual>
+      <origin xyz="0 0 0.028" rpy="0 0 0" />
+      <geometry>
+        <box size="0.23276 0.23276 0.008" />
+      </geometry>
+      <material name="carbon" />
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.102" rpy="0 0 0" />
+      <geometry>
+        <box size="0.19276 0.19276 0.008" />
+      </geometry>
+      <material name="carbon" />
+    </visual>
+    <visual>
+      <origin xyz="0 0.10638 0.066" rpy="0 0 0" />
+      <geometry>
+        <box size="0.23276 0.020 0.028" />
+      </geometry>
+      <material name="metal" />
+    </visual>
+    <visual>
+      <origin xyz="0 -0.10638 0.066" rpy="0 0 0" />
+      <geometry>
+        <box size="0.23276 0.020 0.028" />
+      </geometry>
+      <material name="metal" />
+    </visual>
+    <visual>
+      <origin xyz="0.10638 0 0.066" rpy="0 0 0" />
+      <geometry>
+        <box size="0.020 0.23276 0.028" />
+      </geometry>
+      <material name="metal" />
+    </visual>
+    <visual>
+      <origin xyz="-0.10638 0 0.066" rpy="0 0 0" />
+      <geometry>
+        <box size="0.020 0.23276 0.028" />
+      </geometry>
+      <material name="metal" />
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.055" rpy="0 0 0" />
+      <geometry>
+        <box size="0.120 0.120 0.022" />
+      </geometry>
+      <material name="blue" />
+    </visual>
+  </link>
+
+  <link name="left_front_lift_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.55" />
+      <inertia ixx="0.00020" ixy="0.0" ixz="0.0" iyy="0.00120" iyz="0.0" izz="0.00120" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.024 0.016" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.018 0 0" rpy="0 0 0" /><geometry><box size="0.030 0.042 0.020" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0 0 0" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.026" length="0.040" /></geometry><material name="blue" /></visual>
+  </link>
+  <joint name="left_front_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="left_front_lift_link" />
+    <origin xyz="0.11638 0.11638 0.030" rpy="0 0 0.7853981633974483" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="2000" velocity="6.0" />
+    <dynamics damping="3.0" friction="0.2" />
+  </joint>
+
+  <link name="left_front_lower_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00015" ixy="0.0" ixz="0.0" iyy="0.00090" iyz="0.0" izz="0.00090" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.020 0.014" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+  </link>
+  <joint name="left_front_lower_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="left_front_lower_link" />
+    <origin xyz="0.11638 0.11638 -0.030" rpy="0 0 0.7853981633974483" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="left_front_carrier_link">
+    <inertial>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <mass value="0.30" />
+      <inertia ixx="0.00025" ixy="0.0" ixz="0.0" iyy="0.00016" iyz="0.0" izz="0.00025" />
+    </inertial>
+    <collision>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <geometry>
+        <box size="0.024 0.060 0.080" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.010 0 -0.030" rpy="0 0 0" /><geometry><box size="0.022 0.056 0.076" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.004" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.056" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+  </link>
+  <joint name="left_front_carrier_joint" type="revolute">
+    <parent link="left_front_lift_link" />
+    <child link="left_front_carrier_link" />
+    <origin xyz="0.152 0 0" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.2" upper="1.2" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="left_front_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00070" ixy="0.0" ixz="0.0" iyy="0.00037" iyz="0.0" izz="0.00037" />
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 1.5707963267948966 0" />
+      <geometry>
+        <cylinder radius="0.055" length="0.030" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.022" length="0.028" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="-0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="0 0.047 0" rpy="0 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 0.0332340187" rpy="0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 0.047" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 0.0332340187" rpy="2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.047 0" rpy="3.141592653589793 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 -0.0332340187" rpy="-2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 -0.047" rpy="-1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 -0.0332340187" rpy="-0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+  </link>
+  <joint name="left_front_wheel" type="continuous">
+    <parent link="left_front_carrier_link" />
+    <child link="left_front_wheel_link" />
+    <origin xyz="0.020 0 -0.030" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <dynamics damping="0.05" friction="0.0" />
+  </joint>
+
+  <loop_joint name="left_front_loop" type="spherical">
+    <link1 link="left_front_lower_link" xyz="0.152 0 0" />
+    <link2 link="left_front_carrier_link" xyz="0 0 -0.060" />
+  </loop_joint>
+
+  <link name="left_back_lift_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.55" />
+      <inertia ixx="0.00020" ixy="0.0" ixz="0.0" iyy="0.00120" iyz="0.0" izz="0.00120" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.024 0.016" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.018 0 0" rpy="0 0 0" /><geometry><box size="0.030 0.042 0.020" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0 0 0" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.026" length="0.040" /></geometry><material name="blue" /></visual>
+  </link>
+  <joint name="left_back_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="left_back_lift_link" />
+    <origin xyz="-0.11638 0.11638 0.030" rpy="0 0 2.356194490192345" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="2000" velocity="6.0" />
+    <dynamics damping="3.0" friction="0.2" />
+  </joint>
+
+  <link name="left_back_lower_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00015" ixy="0.0" ixz="0.0" iyy="0.00090" iyz="0.0" izz="0.00090" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.020 0.014" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+  </link>
+  <joint name="left_back_lower_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="left_back_lower_link" />
+    <origin xyz="-0.11638 0.11638 -0.030" rpy="0 0 2.356194490192345" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="left_back_carrier_link">
+    <inertial>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <mass value="0.30" />
+      <inertia ixx="0.00025" ixy="0.0" ixz="0.0" iyy="0.00016" iyz="0.0" izz="0.00025" />
+    </inertial>
+    <collision>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <geometry>
+        <box size="0.024 0.060 0.080" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.010 0 -0.030" rpy="0 0 0" /><geometry><box size="0.022 0.056 0.076" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.004" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.056" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+  </link>
+  <joint name="left_back_carrier_joint" type="revolute">
+    <parent link="left_back_lift_link" />
+    <child link="left_back_carrier_link" />
+    <origin xyz="0.152 0 0" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.2" upper="1.2" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="left_back_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00070" ixy="0.0" ixz="0.0" iyy="0.00037" iyz="0.0" izz="0.00037" />
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 1.5707963267948966 0" />
+      <geometry>
+        <cylinder radius="0.055" length="0.030" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.022" length="0.028" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="-0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="0 0.047 0" rpy="0 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 0.0332340187" rpy="0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 0.047" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 0.0332340187" rpy="2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.047 0" rpy="3.141592653589793 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 -0.0332340187" rpy="-2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 -0.047" rpy="-1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 -0.0332340187" rpy="-0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+  </link>
+  <joint name="left_back_wheel" type="continuous">
+    <parent link="left_back_carrier_link" />
+    <child link="left_back_wheel_link" />
+    <origin xyz="0.020 0 -0.030" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <dynamics damping="0.05" friction="0.0" />
+  </joint>
+
+  <loop_joint name="left_back_loop" type="spherical">
+    <link1 link="left_back_lower_link" xyz="0.152 0 0" />
+    <link2 link="left_back_carrier_link" xyz="0 0 -0.060" />
+  </loop_joint>
+
+  <link name="right_back_lift_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.55" />
+      <inertia ixx="0.00020" ixy="0.0" ixz="0.0" iyy="0.00120" iyz="0.0" izz="0.00120" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.024 0.016" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.018 0 0" rpy="0 0 0" /><geometry><box size="0.030 0.042 0.020" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0 0 0" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.026" length="0.040" /></geometry><material name="blue" /></visual>
+  </link>
+  <joint name="right_back_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="right_back_lift_link" />
+    <origin xyz="-0.11638 -0.11638 0.030" rpy="0 0 -2.356194490192345" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="2000" velocity="6.0" />
+    <dynamics damping="3.0" friction="0.2" />
+  </joint>
+
+  <link name="right_back_lower_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00015" ixy="0.0" ixz="0.0" iyy="0.00090" iyz="0.0" izz="0.00090" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.020 0.014" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+  </link>
+  <joint name="right_back_lower_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="right_back_lower_link" />
+    <origin xyz="-0.11638 -0.11638 -0.030" rpy="0 0 -2.356194490192345" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="right_back_carrier_link">
+    <inertial>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <mass value="0.30" />
+      <inertia ixx="0.00025" ixy="0.0" ixz="0.0" iyy="0.00016" iyz="0.0" izz="0.00025" />
+    </inertial>
+    <collision>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <geometry>
+        <box size="0.024 0.060 0.080" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.010 0 -0.030" rpy="0 0 0" /><geometry><box size="0.022 0.056 0.076" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.004" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.056" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+  </link>
+  <joint name="right_back_carrier_joint" type="revolute">
+    <parent link="right_back_lift_link" />
+    <child link="right_back_carrier_link" />
+    <origin xyz="0.152 0 0" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.2" upper="1.2" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="right_back_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00070" ixy="0.0" ixz="0.0" iyy="0.00037" iyz="0.0" izz="0.00037" />
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 1.5707963267948966 0" />
+      <geometry>
+        <cylinder radius="0.055" length="0.030" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.022" length="0.028" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="-0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="0 0.047 0" rpy="0 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 0.0332340187" rpy="0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 0.047" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 0.0332340187" rpy="2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.047 0" rpy="3.141592653589793 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 -0.0332340187" rpy="-2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 -0.047" rpy="-1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 -0.0332340187" rpy="-0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+  </link>
+  <joint name="right_back_wheel" type="continuous">
+    <parent link="right_back_carrier_link" />
+    <child link="right_back_wheel_link" />
+    <origin xyz="0.020 0 -0.030" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <dynamics damping="0.05" friction="0.0" />
+  </joint>
+
+  <loop_joint name="right_back_loop" type="spherical">
+    <link1 link="right_back_lower_link" xyz="0.152 0 0" />
+    <link2 link="right_back_carrier_link" xyz="0 0 -0.060" />
+  </loop_joint>
+
+  <link name="right_front_lift_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.55" />
+      <inertia ixx="0.00020" ixy="0.0" ixz="0.0" iyy="0.00120" iyz="0.0" izz="0.00120" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.024 0.016" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.018 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.016" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.018 0 0" rpy="0 0 0" /><geometry><box size="0.030 0.042 0.020" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0 0 0" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.026" length="0.040" /></geometry><material name="blue" /></visual>
+  </link>
+  <joint name="right_front_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="right_front_lift_link" />
+    <origin xyz="0.11638 -0.11638 0.030" rpy="0 0 -0.7853981633974483" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="2000" velocity="6.0" />
+    <dynamics damping="3.0" friction="0.2" />
+  </joint>
+
+  <link name="right_front_lower_link">
+    <inertial>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00015" ixy="0.0" ixz="0.0" iyy="0.00090" iyz="0.0" izz="0.00090" />
+    </inertial>
+    <collision>
+      <origin xyz="0.076 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.152 0.020 0.014" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.076 0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.076 -0.016 0" rpy="0 0 0" /><geometry><box size="0.152 0.004 0.014" /></geometry><material name="carbon" /></visual>
+  </link>
+  <joint name="right_front_lower_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="right_front_lower_link" />
+    <origin xyz="0.11638 -0.11638 -0.030" rpy="0 0 -0.7853981633974483" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="1.0122909661567112" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="right_front_carrier_link">
+    <inertial>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <mass value="0.30" />
+      <inertia ixx="0.00025" ixy="0.0" ixz="0.0" iyy="0.00016" iyz="0.0" izz="0.00025" />
+    </inertial>
+    <collision>
+      <origin xyz="0.010 0 -0.030" rpy="0 0 0" />
+      <geometry>
+        <box size="0.024 0.060 0.080" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.010 0 -0.030" rpy="0 0 0" /><geometry><box size="0.022 0.056 0.076" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.004" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="-0.006 0 -0.056" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.006" length="0.070" /></geometry><material name="metal" /></visual>
+  </link>
+  <joint name="right_front_carrier_joint" type="revolute">
+    <parent link="right_front_lift_link" />
+    <child link="right_front_carrier_link" />
+    <origin xyz="0.152 0 0" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.2" upper="1.2" effort="80" velocity="6.0" />
+  </joint>
+
+  <link name="right_front_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.45" />
+      <inertia ixx="0.00070" ixy="0.0" ixz="0.0" iyy="0.00037" iyz="0.0" izz="0.00037" />
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 1.5707963267948966 0" />
+      <geometry>
+        <cylinder radius="0.055" length="0.030" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.022" length="0.028" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="-0.008 0 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.046" length="0.004" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="0 0.047 0" rpy="0 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 0.0332340187" rpy="0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 0.047" rpy="1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 0.0332340187" rpy="2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.047 0" rpy="3.141592653589793 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 -0.0332340187 -0.0332340187" rpy="-2.356194490192345 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0 -0.047" rpy="-1.5707963267948966 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+    <visual><origin xyz="0 0.0332340187 -0.0332340187" rpy="-0.7853981633974483 0 0" /><geometry><cylinder radius="0.008" length="0.022" /></geometry><material name="gold" /></visual>
+  </link>
+  <joint name="right_front_wheel" type="continuous">
+    <parent link="right_front_carrier_link" />
+    <child link="right_front_wheel_link" />
+    <origin xyz="0.020 0 -0.030" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <dynamics damping="0.05" friction="0.0" />
+  </joint>
+
+  <loop_joint name="right_front_loop" type="spherical">
+    <link1 link="right_front_lower_link" xyz="0.152 0 0" />
+    <link2 link="right_front_carrier_link" xyz="0 0 -0.060" />
+  </loop_joint>
+
+  <link name="gimbal_center_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.05" />
+      <inertia ixx="0.00001" ixy="0.0" ixz="0.0" iyy="0.00001" iyz="0.0" izz="0.00001" />
+    </inertial>
+  </link>
+  <joint name="gimbal_center" type="fixed">
+    <parent link="base_link" />
+    <child link="gimbal_center_link" />
+    <origin xyz="0 0 0.080" />
+  </joint>
+
+  <link name="yaw_link">
+    <inertial>
+      <origin xyz="0.025 0 0.015" rpy="0 0 0" />
+      <mass value="1.2" />
+      <inertia ixx="0.00045" ixy="0.0" ixz="0.0" iyy="0.00073" iyz="0.0" izz="0.00100" />
+    </inertial>
+    <collision>
+      <origin xyz="0.025 0 0.015" rpy="0 0 0" />
+      <geometry>
+        <box size="0.080 0.060 0.030" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0 0 0.010" rpy="0 0 0" /><geometry><cylinder radius="0.030" length="0.020" /></geometry><material name="metal" /></visual>
+    <visual><origin xyz="0.025 0 0.023" rpy="0 0 0" /><geometry><box size="0.080 0.060 0.006" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.038 0.030 0.012" rpy="0 0 0" /><geometry><box size="0.014 0.010 0.024" /></geometry><material name="carbon" /></visual>
+    <visual><origin xyz="0.038 -0.030 0.012" rpy="0 0 0" /><geometry><box size="0.014 0.010 0.024" /></geometry><material name="carbon" /></visual>
+  </link>
+  <joint name="yaw" type="continuous">
+    <parent link="gimbal_center_link" />
+    <child link="yaw_link" />
+    <origin xyz="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit effort="200" velocity="6.0" />
+    <dynamics damping="0.2" friction="0.05" />
+  </joint>
+
+  <link name="pitch_link">
+    <inertial>
+      <origin xyz="0.060 0 0" rpy="0 0 0" />
+      <mass value="1.5" />
+      <inertia ixx="0.00062" ixy="0.0" ixz="0.0" iyy="0.00229" iyz="0.0" izz="0.00256" />
+    </inertial>
+    <collision>
+      <origin xyz="0.060 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.120 0.055 0.03682" />
+      </geometry>
+    </collision>
+    <visual><origin xyz="0.060 0 0" rpy="0 0 0" /><geometry><box size="0.120 0.045 0.03682" /></geometry><material name="blue" /></visual>
+    <visual><origin xyz="0.030 0.032 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.012" length="0.014" /></geometry><material name="rubber" /></visual>
+    <visual><origin xyz="0.030 -0.032 0" rpy="0 1.5707963267948966 0" /><geometry><cylinder radius="0.012" length="0.014" /></geometry><material name="rubber" /></visual>
+  </link>
+  <joint name="pitch" type="revolute">
+    <parent link="yaw_link" />
+    <child link="pitch_link" />
+    <origin xyz="0 0 0.025" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.61" upper="0.05" effort="100" velocity="6.0" />
+    <dynamics damping="0.2" friction="0.05" />
+  </joint>
+
+  <link name="muzzle_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.01" />
+      <inertia ixx="0.000001" ixy="0.0" ixz="0.0" iyy="0.000001" iyz="0.0" izz="0.000001" />
+    </inertial>
+  </link>
+  <joint name="muzzle" type="fixed">
+    <parent link="pitch_link" />
+    <child link="muzzle_link" />
+    <origin xyz="0.120 0 0" />
+  </joint>
+
+  <link name="camera_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.10" />
+      <inertia ixx="0.00005" ixy="0.0" ixz="0.0" iyy="0.00005" iyz="0.0" izz="0.00005" />
+    </inertial>
+  </link>
+  <joint name="camera" type="fixed">
+    <parent link="pitch_link" />
+    <child link="camera_link" />
+    <origin xyz="0.095 0 0.018" />
+  </joint>
+
+</robot>
