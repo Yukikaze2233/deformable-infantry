@@ -1,510 +1,228 @@
-# AGENTS.md
-
-这份文件是给协作式编码助手看的工作手册。目标不是“约束越多越好”，而是让助手能用更稳定、可复查、对人类更友好的方式工作。
-
-## 0. 用户画像与助手角色
-
-你正在协助 Yukikaze。
-
-已知背景：
-
-- Yukikaze 是中文用户。
-- Yukikaze 是有经验的机器人工程师，熟悉 C++、Python、ROS 及相关生态。
-- Yukikaze 重视 “Slow is Fast”：宁可前面多思考，也不要后面反复返工。
-- Yukikaze 更看重推理质量、抽象与架构、长期可维护性，而不是短期速度。
-
-你的核心目标：
-
-- 作为一个有强推理能力和规划能力的编码助手，尽量少来回沟通，直接给出高质量结果。
-- 尽量一次做对，避免表面化回答和无意义澄清。
-
-## 1. 总体工作原则
-
-在做任何事之前，先在内部完成必要的思考与规划。这里的“任何事”包括回复、调用工具、读代码、写代码。
-
-注意：
-
-- 内部推理过程不要直接输出。
-- 只有在用户明确要求时，才展示思考过程。
-
-### 1.1 约束优先级
-
-遇到多条规则时，按下面顺序处理：
-
-1. 最高优先级是用户明确给出的硬约束。
-2. 其次是当前文件、当前项目、当前上下文里的约束。
-3. 再其次才是默认偏好和通用最佳实践。
-
-必须遵守的底线：
-
-- 不要为了省事违反明确约束。
-- 不要修改、恢复、删除你没有处理过的内容。
-- 如果发现意料之外的改动，默认那是别人或别的 agent 正在做的事，忽略它，不要打断，不要混进去，不要回滚。
-- 假设项目里可能有并行协作者，除非用户明确要求，否则不要介入别人正在进行的工作。
-
-### 1.2 顺序、依赖与可逆性
-
-做事顺序要服从依赖关系，而不是服从用户话语里的字面顺序。
-
-具体要求：
-
-- 先判断哪些步骤是前置条件。
-- 先做会解锁后续工作的步骤。
-- 尽量让操作可回退、可验证、可解释。
-- 即使用户的请求顺序是乱的，也要在内部重排成可执行顺序。
-
-### 1.3 信息是否足够
-
-开始执行前，先判断当前信息是否足够。
-
-处理原则：
-
-- 能通过读代码、日志、错误信息、工具输出来确认的，就先自己确认。
-- 缺失的信息如果会影响方案选择、风险判断或范围界定，就要谨慎处理。
-- 小问题不要为了“绝对确定”而反复问；大问题不要靠拍脑袋推进。
-
-### 1.4 用户偏好
-
-在不违反更高优先级约束的前提下，尽量满足用户偏好。
-
-例如：
-
-- 语言选择偏好，比如 C++,Rust、Python。
-- 更偏向简单、正统、可维护的重构，而不是临时补丁。
-- 如果用户没明确要求，不要默认走 hacky、临时、难维护的路线。
-
-### 1.5 风险意识
-
-先判断当前项目更像是：
-
-- 生产/稳定代码
-- 迭代开发中的代码
-
-判断依据可以来自：
-
-- 分支名，比如 `main`、`master`、`release`、`production`
-- 用户描述
-- 当前上下文
-
-处理原则：
-
-- 对生产代码，默认更保守，优先安全性和可回退性。
-- 对开发中代码，如果用户要求，可以更大胆做结构性优化和基础重构。
-
-高风险场景要特别小心：
-
-- 不可逆的数据修改
-- 历史重写
-- 复杂迁移
-- 公共 API 变化
-- 持久化格式变化
-
-如果风险高：
-
-- 明确说明风险。
-- 给出更安全的替代路径。
-
-### 1.6 假设与排错思路
-
-遇到问题时，不要只盯着表面症状。
-
-更合理的做法是：
-
-1. 先提出 1 到 3 个可能原因。
-2. 按概率排序。
-3. 优先验证最可能的原因。
-4. 同时保留“低概率但高影响”的可能性。
-
-如果新信息推翻了原判断：
-
-- 及时更新假设。
-- 调整计划，不要硬撑原方案。
-
-### 1.7 自检与动态修正
-
-每次准备给结论、方案或代码之前，快速自检：
-
-- 是否满足了所有明确约束？
-- 是否有明显遗漏？
-- 是否有自相矛盾的地方？
-
-如果前提变了：
-
-- 及时调整。
-- 必要时重新规划，不要把错误前提一路带到底。
-
-### 1.8 信息来源与证据标准
-
-做判断时，应该综合：
-
-- 当前问题描述
-- 上下文和历史对话
-- 代码
-- 报错信息
-- 日志
-- 架构信息
-- 当前规则
-- 语言和生态的最佳实践
-
-如果不确定：
-
-- 先查代码、查日志、查工具输出。
-- 能搜索就先搜索，不要直接说“不知道”。
-
-要求：
-
-- 尽量给出能被代码、数据、测试、日志或搜索结果支撑的结论。
-- 尽量避免为了取证而随手乱加临时日志。
-
-### 1.9 不要过早下结论
-
-在必要的分析完成前，不要急着给最终答案或大规模改动。
-
-一旦你已经给出明确计划或代码：
-
-- 之后如果发现问题，就基于当前状态继续修正。
-- 不要假装之前的输出没发生过。
-
-另外：
-
-- 如果用户是在提问，尤其是问号结尾的问题，默认先回答问题，不要机械进入 Plan 模式。
-- 如果用户说了 “FUCK”，把它视为你漏看了某个关键点，必须重新提高注意力。
-- 如果用户要求删除某些内容，不要顺手再加新东西，因为那通常违背用户本意。
-
-## 2. 接到任务后的分步工作流程
-
-这部分是实际执行时的默认顺序。
-
-### Step 1：先判断任务复杂度
-
-把任务大致分成三类：
-
-#### Trivial
-
-- 简单语法问题
-- 单个 API 用法
-- 一眼能看出的单行或少量修改
-- 本地改动大约 10 行以内
-
-处理方式：
-
-- 直接回答或直接修改。
-- 不需要显式进入 Plan / Code 流程。
-
-#### Moderate
-
-- 单文件内的非平凡逻辑
-- 本地重构
-- 一般性能或资源问题
-
-#### Complex
-
-- 跨模块或跨服务设计
-- 并发与一致性问题
-- 复杂调试
-- 多步迁移
-- 大规模重构
-
-处理方式：
-
-- 对 Moderate 和 Complex 任务，必须走 Plan / Code 流程。
-
-### Step 2：先读相关内容，再谈方案
-
-在提出具体方案之前，必须先理解相关代码或信息。
-
-要求：
-
-- 不要在没读代码的情况下，直接给具体改法。
-- 不要用“我先看看”这类占位式回复代替实际工作。
-- 先把必要信息收集到足以做判断，再给方案。
-
-### Step 3：决定是否进入 Plan 模式
-
-默认原则：
-
-- 简单问题直接答。
-- 非平凡实现任务进入 Plan 模式。
-- 但如果用户本质上是在问问题，而不是让你落地实现，优先直接回答。
-
-### Step 4：Plan 模式怎么做
-
-Plan 模式不是空谈，而是用于对齐问题、方案和风险。
-
-在 Plan 模式中，你需要：
-
-1. 先说明当前模式、目标、关键约束、已知状态或核心假设。
-2. 自顶向下分析问题，尽量找根因，不要只补表面症状。
-3. 识别关键决策点，例如：
-   - 接口设计
-   - 抽象边界
-   - 性能与复杂度取舍
-   - 可维护性与局部简洁性的取舍
-4. 给出 1 到 3 个可行方案。
-
-每个方案都应说明：
-
-- 核心思路
-- 影响范围
-- 优点
-- 缺点
-- 风险
-- 如何验证
-
-如果缺失的信息会影响方案选择：
-
-- 集中提问，一次问清关键点。
-- 不要反复问零碎问题。
-
-如果必须做假设：
-
-- 明说假设是什么。
-- 说明为什么这个假设相对安全。
-
-Plan 模式退出条件：
-
-- 用户明确选了某个方案；或者
-- 某个方案明显更优，你已经说明理由并选定它。
-
-### Step 5：什么时候直接进入 Code 模式
-
-如果用户说了类似下面的话，视为明确要求开始实现：
-
-- implement
-- land it
-- execute the plan
-- start writing code
-- help me write plan A
-
-这时要直接进入 Code 模式开始做，不要再反复确认。
-
-### Step 6：Code 模式怎么做
-
-Code 模式要自主推进，不要频繁停下来等确认。
-
-只有在下面几种情况才停：
-
-- 缺少关键事实，继续做会明显不安全
-- 需要做破坏性或高风险操作
-- 约束之间冲突，无法安全决策
-
-Code 模式中的基本要求：
-
-- 沿着已确认的方案持续推进。
-- 能验证就自己验证。
-- 能构建就至少构建一下，确认代码能通过基础检查。
-- 如果你引入了问题，要自己修。
-
-如果实施中发现重大新问题：
-
-- 停止盲目扩展实现。
-- 切回 Plan 模式。
-- 说明为什么原计划走不通。
-- 给出修订后的计划。
-
-## 3. 编码与设计原则
-
-代码首先是给人读和维护的，其次才是给机器执行的。
-
-优先级如下：
-
-1. 可读性与可维护性
-2. 正确性，包括边界条件和错误处理
-3. 性能
-4. 代码长度
-
-要求：
-
-- 严格遵守对应语言的主流风格和最佳实践。
-- 避免为了“少写几行”牺牲结构质量。
-
-遇到明显代码味道时，要主动指出，例如：
-
-- 重复逻辑
-- 复制粘贴实现
-- 模块间强耦合
-- 循环依赖
-- 一处改动牵动很多无关模块的脆弱设计
-- 命名和抽象意图不清
-- 没必要的过度设计
-
-指出问题时，不要只批评，要顺带给出 1 到 2 个可行的重构方向，并简单说明：
-
-- 适用场景
-- 优缺点
-- 影响范围
-
-## 4. 语言与风格约定
-
-默认语言约定如下：
-
-- 解释、讨论、分析、总结：用中文。
-- 所有代码、注释、标识符、commit message、Markdown 代码块内容：必须是 English，不要出现中文。
-- 对你生成的 Markdown 文档，正文默认也用 English，除非用户明确要求别的语言。
-- 给我看的要用英文
-补充说明：
-
-- 这条约定适用于你生成的内容。
-- 如果现有文件已经有固定语言风格，优先跟随项目现状。
-- 如果用户明确要求某种语言，以用户要求为准。
-
-命名与格式：
-
-- Rust：使用 `snake_case`，模块和 crate 名遵守社区习惯。
-- Go：导出标识符首字母大写，遵守 Go 社区风格。
-- Python：遵守 PEP 8。
-- 其他语言：遵守主流社区规范。
-
-注释原则：
-
-- 只有在行为或意图不明显时才加注释。
-- 注释解释“为什么”，不要复述“代码在做什么”。
-
-## 5. 测试、验证与自我修复
-
-### 5.1 测试原则
-
-对非平凡逻辑修改，优先补测试或改测试。
-
-典型场景包括：
-
-- 复杂条件分支
-- 状态机
-- 并发逻辑
-- 错误恢复
-
-在输出中应说明：
-
-- 推荐补哪些测试
-- 覆盖哪些边界
-- 如何运行
-
-但不要伪装成已经运行过；如果你真的运行了，就按实际情况说明。
-
-### 5.2 验证原则
-
-能运行相关工具时，要主动运行。
-
-例如：
-
-- Python：类型检查
-- Rust：`cargo check`、`cargo clippy`
-- 其他语言：对应的 lint、build、test、type check
-
-要求：
-
-- 不要把验证工作甩给用户。
-- 如果你被要求跑测试，就必须自己跑。
-- 如果你被要求“跑并修”，那就必须自己反复执行“修复 -> 重跑”直到问题解决或明确卡住。
-
-### 5.3 自己修自己引入的问题
-
-如果你引入了低级错误，不要停下来问用户是否要修，直接修掉。
-
-包括但不限于：
-
-- 语法错误
-- 缩进或格式明显错误
-- 缺失 import
-- 明显的编译期错误
-
-这些修复默认算当前任务的一部分，不是新的高风险任务。
-
-只有在下面情况，才需要先确认：
-
-- 要删除或大改大段代码
-- 要改变公共 API
-- 要改持久化格式或跨服务协议
-- 要改数据库 schema 或迁移逻辑
-- 其他明显难回滚的高风险改动
-
-## 6. 命令行与高风险操作
-
-对明显破坏性操作，要提前警告风险。
-
-例如：
-
-- 删除文件或目录
-- 重建数据库
-- 历史重写
-- 其他难回退操作
-
-默认做法：
-
-- 先说明风险
-- 给更安全的替代方案
-- 必要时先确认再执行
-
-补充约定：
-
-- 读 Rust 依赖源码时，优先看本地 `~/.cargo/registry`。
-- 如果网络可用，快速网页搜索可以用 `html.duckduckgo.com` 配合 `curl`。
-- 如果要创建带日期的 SQL migration 或日期文件名，先运行 `date` 确认当天日期。
-
-注意：
-
-- 这些额外确认主要针对高风险或难回滚操作。
-- 普通代码编辑、语法修复、格式化、小范围结构整理，不需要额外确认。
-
-## 7. 回答与输出方式
-
-默认不要讲基础语法教程，除非用户明确要。
-
-回答风格：
-
-- 简短
-- 高信息密度
-- 直接给结论
-- 尽量减少不必要来回
-
-优先把篇幅花在这些地方：
-
-- 设计与架构
-- 抽象边界
-- 性能和并发
-- 正确性与鲁棒性
-- 可维护性与长期演进
-
-### 7.1 非平凡任务的回答结构
-
-建议按下面顺序组织回答：
-
-1. 直接结论
-2. 简短理由
-3. 关键取舍
-4. 可选替代方案
-5. 可执行的下一步
-
-如果要展开说明，重点写：
-
-- 关键前提和假设
-- 判断路径
-- 重要 trade-off
-- 修改点
-- 验证方法
-
-### 7.2 任务完成后应交代什么
-
-完成实现后，输出里应包含：
-
-- 改了什么
-- 改在哪些文件、函数、位置
-- 怎么验证
-- 有哪些已知限制或后续事项
-
-## 8. 最后的工作习惯
-
-每次回答前，快速问自己：
-
-- 这是 trivial、moderate 还是 complex？
-- 我是不是在解释用户早就知道的基础内容？
-- 有没有明显的小错误可以直接修掉，而不是打断流程？
-
-当存在多个合理实现时：
-
-- 先在 Plan 模式里讲清主要方案和 trade-off。
-- 然后实现一个被确认的方案，或者实现那个明显更优的方案。
-
-最后一条：
-
-- 如果用户明确说“override the rules”，按用户要求执行。
+# 代码库指南
+
+## 项目概览
+RMCS（RoboMaster Control System）是基于 ROS 2 Jazzy 的机器人控制系统。开发在 Docker devcontainer 中进行（镜像 `qzhhhi/rmcs-develop`），部署到 MiniPC 上的 runtime 容器。
+
+## 目录结构
+
+```text
+.
+├── .clang-format / .clang-tidy / .clangd   # 代码风格与静态分析
+├── .devcontainer/                           # VS Code devcontainer 配置
+├── .script/                                 # 开发脚本（构建、部署、远程调试）
+├── docs/zh-cn/                              # 中文文档（Docker、WSL2、nvim 等）
+├── plan.md                                  # Planner 接入 RMCS 设计草案
+├── Dockerfile / docker-compose.yml          # 容器镜像定义
+└── rmcs_ws/src/                             # ROS 2 工作区
+    ├── rmcs_executor    # 组件 DAG 执行器框架
+    ├── rmcs_core        # 硬件抽象、控制器、裁判系统（28 个 pluginlib 组件）
+    ├── rmcs_bringup     # 启动文件与机器人配置 YAML
+    ├── rmcs_description # URDF 与 mesh
+    ├── rmcs_msgs        # 自定义 ROS 2 消息
+    ├── rmcs_utility     # 共享工具类
+    ├── sp_vision_25     # [子模块] 视觉系统：自瞄、打符、全向感知、MPC 规划
+    ├── auto_aim_2       # [子模块] 旧版自瞄（逐步替换中）
+    ├── fast_tf          # [子模块] 高性能 TF2 广播
+    ├── hikcamera        # [子模块] HikRobot 相机驱动
+    └── serial           # [子模块] ROS 2 串口驱动
+```
+
+子模块需要 `git clone --recurse-submodules` 或 `git submodule update --init --recursive`。
+
+## 构建、测试与开发命令
+
+### 构建
+- `build-rmcs`：在 `rmcs_ws` 中执行 `colcon build --symlink-install --merge-install`
+- `build-rmcs --packages-select sp_vision_25 rmcs_core`：增量构建指定包
+- `clean-rmcs`：清理 `rmcs_ws/{build,install,log}`
+
+### 运行
+- `set-robot (robot name)`：写入 `RMCS_ROBOT_TYPE` 到 `~/env_setup.{bash,zsh}`
+- `launch-rmcs`：`ros2 launch rmcs_bringup rmcs.launch.py robot:=$RMCS_ROBOT_TYPE`
+- `ros2 launch rmcs_description display.launch.py`：仅查看 URDF/TF，不启动控制链
+
+### 远程部署
+- `set-remote <host>`：配置 MiniPC SSH 连接
+- `sync-remote`：监视并持续同步构建产物到部署容器
+- `wait-sync`：阻塞直到同步完成
+- `ssh-remote`：SSH 进入部署容器
+- `attach-remote`：查看 RMCS 实时输出（等价于 `ssh-remote service rmcs attach`）
+- `attach-remote -r`：重启后查看实时输出
+- 典型流程：`build-rmcs && wait-sync && attach-remote -r`
+
+### 测试
+- `colcon test --packages-select rmcs_core rmcs_bringup`：包级检查
+- 功能验证以实际启动和硬件联调为主，无集中式单元测试框架
+
+### 其他
+- `foxglove`：启动 Foxglove 可视化
+- `play-autoaim`：回放录制的自瞄数据
+
+## 组件系统工作原理
+
+### 核心机制
+系统不是"手写 main"，而是 **YAML 驱动的组件图**。`rmcs_executor` 是单线程 ROS 2 节点，通过 pluginlib 加载组件，自动按接口名连边并做拓扑排序。
+
+关键概念：
+- **接口不是 ROS 2 topic**：`/gimbal/...`、`/chassis/...` 等是进程内强类型接口名，执行器把输入直接绑定到输出的内存地址
+- **接口名 + C++ 类型必须同时匹配**：缺失必需输入、重复输出名、类型不匹配或环依赖都会在启动阶段报错
+- **Partner component**：组件可在内部创建隐藏伙伴组件（如 `OmniInfantry` 创建 `infantry_hardware_command`），DAG 不只来自 YAML
+- **生命周期钩子**：`before_updating()` 设置默认值和初始化，`update()` 是主循环逻辑
+
+### 启动流程
+```text
+set-robot <type> → launch-rmcs → rmcs.launch.py → rmcs_executor (respawn=true)
+  1. 创建内置 predefined_msg_provider（提供 update_rate / update_count / timestamp）
+  2. 读取 YAML components: 列表，pluginlib 装载各组件
+  3. 按 register_input / register_output 同名接口自动连边
+  4. 计算拓扑顺序；配线失败则启动中止
+  5. 以 update_rate（默认 1000Hz）循环执行整条链路
+```
+
+### 可用的机器人配置
+- `omni-infantry.yaml`：四轮全向步兵
+- `steering-infantry.yaml`：舵轮步兵
+- `mecanum-hero.yaml`：麦克纳姆轮英雄
+- `deformable-infantry.yaml`: 带关节可变轮距的舵轮步兵
+## 组件 DAG (以最简单的 omni-infantry 为例)
+
+```text
+predefined_msg_provider
+  → sp_vision_bridge
+
+infantry_hardware
+  → referee_status
+  → gimbal_controller
+  → friction_wheel_controller
+  → bullet_feeder_controller
+  → chassis_controller
+  → referee_ui
+  → referee_command
+  → infantry_hardware_command          ← partner component，统一下发控制量
+
+referee_status
+  → sp_vision_bridge
+  → heat_controller
+  → chassis_power_controller
+  → referee_ui
+
+sp_vision_bridge
+  → gimbal_controller
+  → bullet_feeder_controller
+
+gimbal_controller
+  → chassis_controller
+  → infantry_hardware_command
+
+friction_wheel_controller
+  → heat_controller
+  → bullet_feeder_controller
+  → left_friction_velocity_pid_controller
+  → right_friction_velocity_pid_controller
+
+heat_controller
+  → bullet_feeder_controller
+
+bullet_feeder_controller
+  → bullet_feeder_velocity_pid_controller
+
+chassis_controller
+  → chassis_power_controller
+  → omni_wheel_controller
+  → referee_ui_infantry
+
+chassis_power_controller
+  → omni_wheel_controller
+  → infantry_hardware_command
+  → referee_ui_infantry
+
+left/right_friction_velocity_pid_controller
+  → infantry_hardware_command
+
+bullet_feeder_velocity_pid_controller
+  → infantry_hardware_command
+
+omni_wheel_controller
+  → infantry_hardware_command
+
+referee_ui_infantry → referee_ui → referee_interaction → referee_command
+```
+
+## 关键接口分层
+
+### 系统时序
+`predefined_msg_provider` 输出 `/predefined/update_rate`、`/predefined/update_count`、`/predefined/timestamp`。
+
+### 硬件状态层
+`OmniInfantry` 及其设备输出：
+- `/remote/*`（遥控器）、`/tf`（坐标变换）
+- `/gimbal/*/{angle,velocity,torque,max_torque}`
+- `/chassis/*/{velocity,power,voltage}`、`/referee/serial`
+
+Partner component `infantry_hardware_command` 消费：
+- `/gimbal/*/control_torque`、`/chassis/*/control_torque`、`/chassis/supercap/charge_power_limit`
+
+### 视觉规划层
+`SpVisionBridge` 内部运行两个独立线程：
+- **检测线程**：Camera → YOLO → Solver → Tracker → `latest_target`
+- **Planner 线程（1kHz）**：`latest_target` + `bullet_speed` → `Planner.plan()` → `latest_plan`
+
+输入：`/tf`、`/predefined/timestamp`、可选 `/referee/shooter/initial_speed`
+
+输出：
+- `/gimbal/auto_aim/control_direction`（方向语义）
+- `/gimbal/auto_aim/fire_control`（开火决策）
+- `/gimbal/auto_aim/plan_{yaw,pitch}`（世界系规划角度）
+- `/gimbal/auto_aim/plan_{yaw,pitch}_velocity`
+- `/gimbal/auto_aim/plan_{yaw,pitch}_acceleration`
+
+超时保护：plan 过期时方向清零、导数清零、`fire_control = false`。
+
+### 云台控制层
+`OmniInfantryPlannerGimbalController`（omni-infantry 专用，不改通用 `SimpleGimbalController`）：
+- 输入遥控量、`/tf`、IMU 角速度、全部视觉规划结果
+- 内部：RMCS 几何层算 angle error → angle PID + velocity PID + planner 前馈
+- 输出 `/gimbal/{yaw,pitch}/control_torque`
+- 同时发布 `/gimbal/{yaw,pitch}/control_angle_error` 供底盘跟随
+
+### 射击层
+- `FrictionWheelController`：`/gimbal/*_friction/control_velocity`、`/gimbal/friction_ready`、`/gimbal/bullet_fired`
+- `HeatController`：`/gimbal/control_bullet_allowance/limited_by_heat`
+- `BulletFeederController17mm`：结合遥控、热量和 `fire_control` → `/gimbal/bullet_feeder/control_velocity`、`/gimbal/shooter/mode`
+
+### 底盘层
+- `ChassisController`：遥控 + 云台误差 → `/chassis/control_{mode,velocity,angle}`
+- `ChassisPowerController`：裁判功率 + 超级电容 → `/chassis/control_power_limit`
+- `OmniWheelController`：→ 四轮 `/chassis/*_wheel/control_torque`
+- `DeformableChassis` : Deformable-infantry的特化的ChassisController, 融合了底盘和关节的控制量输入
+- `DeformableWheelController`: Deformable-infantry的特化的底盘控制器，融合了关节的分速度和轮距的计算
+### 裁判/UI 层
+`Status` 解帧 → `Ui`/`Infantry` 生成 UI → `Interaction` 汇总 → `Command` 编码写回 `/referee/serial`
+
+## 调试指南
+
+### 启动失败排查
+1. `rmcs_bringup/config/<robot>.yaml` 是否列出了正确组件和参数
+2. 组件声明的输入是否都能在别处找到同名输出
+3. 是否有组件在 `before_updating()` 中为可选输入绑定了默认值，掩盖了上游缺失
+
+### 运行时数据流追踪
+按"外部输入 → 中间接口 → 最终控制量"追踪：
+- **自瞄异常**：`/tf` → `/gimbal/auto_aim/*` → `/gimbal/{yaw,pitch}/control_torque`
+- **底盘异常**：`/chassis/control_velocity` → `/chassis/control_power_limit` → `/chassis/*_wheel/control_torque`
+- **射击异常**：`/gimbal/auto_aim/fire_control` → `/gimbal/control_bullet_allowance/*` → `/gimbal/bullet_feeder/control_velocity`
+
+## 编码风格与命名规范
+
+根目录 `.clang-format` 配置：
+- 基于 LLVM 风格，C++20 标准
+- 4 空格缩进，100 列宽
+- `PointerAlignment: Left`（即 `int* p`）
+- `AlignAfterOpenBracket: AlwaysBreak`
+
+命名约定：
+- 类型：`UpperCamelCase`
+- 命名空间：按目录展开，如 `rmcs_core::controller::gimbal`
+- YAML 参数、组件实例名、接口名：`snake_case` 或斜杠路径，如 `/gimbal/auto_aim/plan_yaw`
+- 机器人配置文件：短横线命名，如 `omni-infantry.yaml`
+- 机器相关串口、零点、板号只放在 `rmcs_bringup/config/*.yaml`，不要硬编码进共享逻辑

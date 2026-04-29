@@ -109,30 +109,29 @@ JointController::WheelCartesianState JointController::compute_wheel_cartesian(
     return ws;
 }
 
-JointController::AttitudeBias JointController::compute_attitude_bias(const CycleInput& input) {
-    AttitudeBias bias;
+std::array<double, kJointCount> JointController::compute_attitude_angle_corrections(const CycleInput& input) {
+    std::array<double, kJointCount> corrections{};
     double cp = std::clamp(input.imu_pitch - input.imu_pitch_offset, -kMaxAttitudeRad, kMaxAttitudeRad);
     double cr = std::clamp(input.imu_roll  - input.imu_roll_offset,  -kMaxAttitudeRad, kMaxAttitudeRad);
     double pf = pitch_pid_.update(-cp, input.imu_pitch_rate, input.dt);
     double rf = roll_pid_.update(cr, -input.imu_roll_rate, input.dt);
     if (!std::isfinite(pf) || !std::isfinite(rf)) {
-        bias.leg_force.fill(std::numeric_limits<double>::quiet_NaN());
-        return bias;
+        corrections.fill(std::numeric_limits<double>::quiet_NaN());
+        return corrections;
     }
     for (size_t i = 0; i < kJointCount; ++i)
-        bias.leg_force[i] = kPitchSigns[i] * pf + kRollSigns[i] * rf;
-    return bias;
+        corrections[i] = -kPitchSigns[i] * pf - kRollSigns[i] * rf;
+    return corrections;
 }
 
 void JointController::compute_support_forces(
     std::array<double, kJointCount>& out,
     const WheelCartesianState& ws,
-    const AttitudeBias& bias,
     double z_ref,
     const Eigen::Vector2d& accel_est) const {
 
     for (size_t i = 0; i < kJointCount; ++i) {
-        if (!std::isfinite(ws.z[i]) || !std::isfinite(ws.z_dot[i]) || !std::isfinite(bias.leg_force[i])) {
+        if (!std::isfinite(ws.z[i]) || !std::isfinite(ws.z_dot[i])) {
             out.fill(std::numeric_limits<double>::quiet_NaN());
             return;
         }
@@ -149,7 +148,7 @@ void JointController::compute_support_forces(
             accel += kRollSigns[i]  * config_.mass * accel_est.y() * config_.com_height
                    / (4 * config_.wheel_base_half_y);
         }
-        out[i] = std::max(grav + spring + damping + bias.leg_force[i] + accel, 0.0);
+        out[i] = std::max(grav + spring + damping + accel, 0.0);
     }
 }
 
@@ -262,8 +261,8 @@ JointController::CycleOutput JointController::update(const CycleInput& input) {
         double ride    = std::clamp(deploy + config_.ride_height_offset, deploy, config_.max_angle);
         double z_ref   = -config_.rod_length * std::cos(deploy - config_.preload_angle);
 
-        AttitudeBias attitude = compute_attitude_bias(input);
-        if (!std::isfinite(attitude.leg_force[0])) {
+        std::array<double, kJointCount> attitude_corrections = compute_attitude_angle_corrections(input);
+        if (!std::isfinite(attitude_corrections[0])) {
             pitch_pid_.reset();
             roll_pid_.reset();
             leg_states_ = {};
@@ -290,14 +289,16 @@ JointController::CycleOutput JointController::update(const CycleInput& input) {
             WheelCartesianState ws =
                 compute_wheel_cartesian(input.physical_angles, input.physical_velocities);
             std::array<double, kJointCount> support_forces{};
-            compute_support_forces(support_forces, ws, attitude, z_ref, input.control_acceleration);
+            compute_support_forces(support_forces, ws, z_ref, input.control_acceleration);
 
             for (size_t i = 0; i < kJointCount; ++i) {
                 output.support_forces[i] = support_forces[i];
                 if (!leg_states_[i].active) continue;
                 if (!std::isfinite(support_forces[i]) || !std::isfinite(input.physical_angles[i]))
                     continue;
-                leg_commands_[i].final_target_angle = ride;
+                double corrected_ride = std::clamp(
+                    ride + attitude_corrections[i], deploy, config_.max_angle);
+                leg_commands_[i].final_target_angle = corrected_ride;
                 leg_commands_[i].suspension_mode    = true;
                 leg_commands_[i].suspension_torque =
                     force_to_torque(support_forces[i], input.physical_angles[i]);

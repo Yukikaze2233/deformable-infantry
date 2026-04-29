@@ -107,10 +107,6 @@ private:
         double update(double error, double rate, double dt);
     };
 
-    struct AttitudeBias {
-        std::array<double, kJointCount> leg_force{};
-    };
-
     struct WheelCartesianState {
         std::array<double, kJointCount> z{};
         std::array<double, kJointCount> z_dot{};
@@ -123,12 +119,11 @@ private:
         const std::array<double, kJointCount>& angles,
         const std::array<double, kJointCount>& velocities) const;
 
-    AttitudeBias compute_attitude_bias(const CycleInput& input);
+    std::array<double, kJointCount> compute_attitude_angle_corrections(const CycleInput& input);
 
     void compute_support_forces(
         std::array<double, kJointCount>& out,
         const WheelCartesianState& ws,
-        const AttitudeBias& bias,
         double z_ref,
         const Eigen::Vector2d& accel_est) const;
 

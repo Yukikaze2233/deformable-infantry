@@ -400,13 +400,22 @@ void DeformableSuspensionController::update() {
     publish_suspension_outputs_(output);
     publish_joint_targets_(output, cycle_input.physical_angles);
 
-    // Run per-leg ADRC servos with suspension outputs
+    // Run per-leg ADRC servos with suspension outputs — skip if chassis is in reset
+    const bool all_requests_nan = !std::isfinite(raw_requests[0])
+                               && !std::isfinite(raw_requests[1])
+                               && !std::isfinite(raw_requests[2])
+                               && !std::isfinite(raw_requests[3]);
     const std::array<OutputInterface<double>*, kJointCount> torque_outputs{
         &left_front_joint_control_torque_,
         &left_back_joint_control_torque_,
         &right_back_joint_control_torque_,
         &right_front_joint_control_torque_,
     };
+    if (all_requests_nan) {
+        for (auto* out : torque_outputs)
+            **out = kQuietNan;
+        return;
+    }
     for (size_t i = 0; i < kJointCount; ++i) {
         JointServo::Input servo_in;
         servo_in.measurement_angle  = cycle_input.physical_angles[i];

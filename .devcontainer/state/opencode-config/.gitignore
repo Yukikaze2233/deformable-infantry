@@ -1,2 +1,5 @@
-*
-!.gitignore
+node_modules
+package.json
+bun.lock
+.gitignore
+opencode.env

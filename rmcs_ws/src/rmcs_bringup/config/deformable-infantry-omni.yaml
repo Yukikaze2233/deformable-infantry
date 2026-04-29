@@ -43,7 +43,7 @@ deformable_infantry:
     left_back_zero_point: 5801
     right_back_zero_point: 7817
     right_front_zero_point: 7136
-    yaw_motor_zero_point: 50701
+    yaw_motor_zero_point: 17772
     pitch_motor_zero_point: 10898
     debug_log_supercap: false
     debug_log_wheel_motor: false
@@ -66,23 +66,24 @@ suspension_controller:
     # Suspension geometry / support model
     active_suspension_mass: 22.5
     active_suspension_rod_length: 0.150
-    active_suspension_Kz_linear: 15000.0
-    active_suspension_D_leg_linear: 200.0
+    active_suspension_Kz_linear: 3000.0
+    active_suspension_D_leg_linear: 50.0
     active_suspension_torque_limit: 80.0
     active_suspension_gravity_comp_gain: 1.0
-    active_suspension_preload_angle_deg: 8.0
-    active_suspension_entry_offset_deg: 1.5
-    active_suspension_ride_height_offset_deg: 3.0
-    active_suspension_hold_travel_deg: 5.0
+    active_suspension_preload_angle_deg: 12.0
+    active_suspension_entry_offset_deg: 8.0
+    active_suspension_ride_height_offset_deg: 10.0
+    active_suspension_hold_travel_deg: 8.0
     active_suspension_activation_velocity_threshold_deg: 15.0
 
-    # IMU attitude correction as suspension force bias
-    active_suspension_Kp: 8.0
-    active_suspension_pitch_ki: 0.35
-    active_suspension_Dp: 0.28
-    active_suspension_Kr: 8.0
-    active_suspension_roll_ki: 0.35
-    active_suspension_Dr: 0.28
+    # IMU attitude correction — PID output is target angle offset per leg (rad)
+    # DISABLED for oscillation isolation: Kp=0 tests whether IMU path is the cause
+    active_suspension_Kp: 0.0
+    active_suspension_pitch_ki: 0.0
+    active_suspension_Dp: 0.0
+    active_suspension_Kr: 0.0
+    active_suspension_roll_ki: 0.0
+    active_suspension_Dr: 0.0
     active_suspension_pitch_angle_diff_limit_deg: 45.0
     active_suspension_roll_angle_diff_limit_deg: 45.0
     active_suspension_pid_integral_limit_deg: 20.0
@@ -90,12 +91,46 @@ suspension_controller:
     # Joint intent trajectory limits
     target_physical_velocity_limit: 180.0
     target_physical_acceleration_limit: 720.0
-    active_suspension_target_velocity_limit_deg: 80.0
-    active_suspension_target_acceleration_limit_deg: 360.0
+    active_suspension_target_velocity_limit_deg: 40.0
+    active_suspension_target_acceleration_limit_deg: 180.0
 
     # IMU mounting-error calibration
     chassis_imu_calibration_wait_s: 2.0
     chassis_imu_calibration_sample_s: 3.0
+
+    # Per-leg ADRC servo — normal mode (rigid tracking)
+    adrc_dt: 0.001
+    adrc_b0: -0.60
+    adrc_kt: 1.0
+    adrc_td_h: 0.001
+    adrc_td_r: 50.0
+    adrc_eso_w0: 250.0
+    adrc_eso_auto_beta: true
+    adrc_k1: 30.0
+    adrc_k2: 17.0
+    adrc_alpha1: 0.75
+    adrc_alpha2: 0.7
+    adrc_delta: 0.02
+    adrc_u_min: -200.0
+    adrc_u_max: 200.0
+    adrc_output_min: -200.0
+    adrc_output_max: 200.0
+    adrc_torque_feedforward_gain: 0.0
+
+    # Per-leg ADRC servo — suspension mode (compliant spring)
+    adrc_suspension_td_h: 0.001
+    adrc_suspension_td_r: 15.0
+    adrc_suspension_eso_w0: 60.0
+    adrc_suspension_k1: 5.0
+    adrc_suspension_k2: 6.0
+    adrc_suspension_alpha1: 0.75
+    adrc_suspension_alpha2: 0.7
+    adrc_suspension_delta: 0.02
+    adrc_suspension_u_min: -40.0
+    adrc_suspension_u_max: 40.0
+    adrc_suspension_output_min: -40.0
+    adrc_suspension_output_max: 40.0
+    adrc_suspension_torque_feedforward_gain: 0.0
 
 gimbal_controller:
   ros__parameters:
@@ -178,7 +213,7 @@ bullet_feeder_velocity_pid_controller:
     measurement: /gimbal/bullet_feeder/velocity
     setpoint: /gimbal/bullet_feeder/control_velocity
     control: /gimbal/bullet_feeder/control_torque
-    kp: 1.5
+    kp: 1.4
     ki: 0.0
     kd: 0.0
 
@@ -193,37 +228,3 @@ deformable_chassis_controller:
     k1: 2.958580e+00
     k2: 3.082190e-03
     no_load_power: 11.37
-
-# Shared ADRC parameters — applied to suspension_controller via /** wildcard.
-/**:
-  ros__parameters:
-    adrc_dt: 0.001
-    adrc_b0: -0.60
-    adrc_kt: 1.0
-    adrc_td_h: 0.001
-    adrc_td_r: 50.0
-    adrc_eso_w0: 250.0
-    adrc_eso_auto_beta: true
-    adrc_k1: 30.0
-    adrc_k2: 17.0
-    adrc_alpha1: 0.75
-    adrc_alpha2: 0.7
-    adrc_delta: 0.02
-    adrc_u_min: -200.0
-    adrc_u_max: 200.0
-    adrc_output_min: -200.0
-    adrc_output_max: 200.0
-    adrc_suspension_td_h: 0.001
-    adrc_suspension_td_r: 50.0
-    adrc_suspension_eso_w0: 250.0
-    adrc_suspension_k1: 30.0
-    adrc_suspension_k2: 17.0
-    adrc_suspension_alpha1: 0.75
-    adrc_suspension_alpha2: 0.7
-    adrc_suspension_delta: 0.02
-    adrc_suspension_u_min: -200.0
-    adrc_suspension_u_max: 200.0
-    adrc_suspension_output_min: -200.0
-    adrc_suspension_output_max: 200.0
-    adrc_torque_feedforward_gain: 0.0
-    adrc_suspension_torque_feedforward_gain: -1.0
