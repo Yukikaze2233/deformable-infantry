@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -eu
+
+mode="${1:-connect}"
+endpoint="${2:-tcp/127.0.0.1:7447}"
+image="${ZENOH_BRIDGE_IMAGE:-eclipse/zenoh-bridge-ros2dds:latest}"
+rest_port="${ZENOH_REST_HTTP_PORT:-8001}"
+domain_id="${ROS_DOMAIN_ID:-0}"
+localhost_only="${ROS_LOCALHOST_ONLY:-}"
+
+docker_env=(
+    -e "ROS_DOMAIN_ID=${domain_id}"
+)
+
+if [ -n "${localhost_only}" ]; then
+    docker_env+=(-e "ROS_LOCALHOST_ONLY=${localhost_only}")
+fi
+
+case "${mode}" in
+    connect)
+        exec docker run --rm --init --net host \
+            "${docker_env[@]}" \
+            "${image}" \
+            -e "${endpoint}" \
+            --rest-http-port "${rest_port}"
+        ;;
+    listen)
+        exec docker run --rm --init --net host \
+            "${docker_env[@]}" \
+            "${image}" \
+            -l "${endpoint}" \
+            --rest-http-port "${rest_port}"
+        ;;
+    *)
+        echo "Usage: $0 [connect|listen] [tcp/host:port]" >&2
+        exit 1
+        ;;
+esac

@@ -2,6 +2,10 @@
 
 source ~/env_setup.bash
 
+if [ "${RMCS_ENABLE_REMOTE_DISCOVERY:-0}" = "1" ] && [ -f "${RMCS_PATH:-/workspaces/RMCS}/.script/isaac-sim-env.sh" ]; then
+    source "${RMCS_PATH:-/workspaces/RMCS}/.script/isaac-sim-env.sh"
+fi
+
 if [ -z "${RMCS_ROBOT_TYPE}" ]; then
     echo "Error: Please set robot type first (e.g. 'set-robot sentry')."
     exit 1

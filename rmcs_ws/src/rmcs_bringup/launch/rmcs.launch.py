@@ -33,17 +33,29 @@ class MyLaunchDescriptionEntity(LaunchDescriptionEntity):
             )
         )
 
+        installed_config_path = os.path.join(
+            FindPackageShare("rmcs_bringup").perform(context),
+            "config",
+            robot_name + ".yaml",
+        )
+        source_config_path = os.path.join(
+            os.environ.get("RMCS_PATH", "/workspaces/RMCS"),
+            "rmcs_ws",
+            "src",
+            "rmcs_bringup",
+            "config",
+            robot_name + ".yaml",
+        )
+        config_path = installed_config_path if os.path.isfile(installed_config_path) else source_config_path
+
+        if config_path == source_config_path:
+            entities.append(LogInfo(msg=f"Using source config fallback: {source_config_path}"))
+
         entities.append(
             Node(
                 package="rmcs_executor",
                 executable="rmcs_executor",
-                parameters=[
-                    os.path.join(
-                        FindPackageShare("rmcs_bringup").perform(context),
-                        "config",
-                        robot_name + ".yaml",
-                    ),
-                ],
+                parameters=[config_path],
                 respawn=True,
                 respawn_delay=1.0,
                 output="log",  # stdout and stderr are logged to launch log file and stderr to the screen.

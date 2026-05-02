@@ -1,0 +1,307 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs_core::hardware::DeformableInfantryOmniSimState -> deformable_infantry_sim_state
+
+      - rmcs_core::controller::active_suspension::AdaptiveOmniJointSupportObserver -> adaptive_joint_support_observer
+      - rmcs_core::controller::active_suspension::AdaptiveOmniContactEstimator -> adaptive_contact_estimator
+      - rmcs_core::controller::active_suspension::AdaptiveOmniActiveSuspension -> adaptive_active_suspension
+      - rmcs_core::controller::active_suspension::AdaptiveDeformableOmniWheelController -> adaptive_deformable_chassis_controller
+
+      - rmcs_core::controller::adrc::AdrcController -> lf_joint_adrc_controller
+      - rmcs_core::controller::adrc::AdrcController -> lb_joint_adrc_controller
+      - rmcs_core::controller::adrc::AdrcController -> rb_joint_adrc_controller
+      - rmcs_core::controller::adrc::AdrcController -> rf_joint_adrc_controller
+
+      - rmcs_core::hardware::DeformableInfantryOmniSimActuator -> deformable_infantry_sim_actuator
+
+      - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
+
+value_broadcaster:
+  ros__parameters:
+    forward_list:
+      - /chassis/imu/pitch
+      - /chassis/imu/roll
+      - /chassis/left_front_joint/physical_angle
+      - /chassis/left_back_joint/physical_angle
+      - /chassis/right_back_joint/physical_angle
+      - /chassis/right_front_joint/physical_angle
+      - /chassis/left_front_joint/target_physical_angle
+      - /chassis/left_back_joint/target_physical_angle
+      - /chassis/right_back_joint/target_physical_angle
+      - /chassis/right_front_joint/target_physical_angle
+      - /chassis/left_front_joint/control_torque
+      - /chassis/left_back_joint/control_torque
+      - /chassis/right_back_joint/control_torque
+      - /chassis/right_front_joint/control_torque
+      - /chassis/left_front_wheel/control_torque
+      - /chassis/left_back_wheel/control_torque
+      - /chassis/right_back_wheel/control_torque
+      - /chassis/right_front_wheel/control_torque
+      - /chassis/left_front_contact/confidence
+      - /chassis/left_back_contact/confidence
+      - /chassis/right_back_contact/confidence
+      - /chassis/right_front_contact/confidence
+      - /chassis/left_front_contact/load_share
+      - /chassis/left_back_contact/load_share
+      - /chassis/right_back_contact/load_share
+      - /chassis/right_front_contact/load_share
+      - /chassis/contact/confidence_mean
+      - /chassis/body/heave_reference
+      - /chassis/body/heave_estimate
+      - /chassis/body/pitch_reference
+      - /chassis/body/pitch_estimate
+      - /chassis/body/roll_reference
+      - /chassis/body/roll_estimate
+      - /chassis/body/warp_reference
+      - /chassis/body/warp_estimate
+
+deformable_infantry_sim_state:
+  ros__parameters:
+    joint_state_topic: /joint_states
+    imu_topic: /imu
+    cmd_vel_topic: /cmd_vel
+    base_target_physical_angle_topic: /sim/chassis/base_target_physical_angle
+    joint_names:
+      - left_front_joint
+      - left_back_joint
+      - right_back_joint
+      - right_front_joint
+    wheel_names:
+      - left_front_wheel
+      - left_back_wheel
+      - right_back_wheel
+      - right_front_wheel
+    # Normal-mode stand pose.
+    # Angle convention matches Isaac Sim /joint_states for the four lift joints:
+    #   0 deg = URDF startup pose
+    #   positive = toward the URDF upper limit
+    base_target_physical_angle_deg:
+      - 58.0
+      - 58.0
+      - 58.0
+      - 58.0
+    control_power_limit: 500.0
+    joint_zero_physical_angle_deg: 62.5
+    radius_base: 0.2341741
+    radius_arm_length: 0.150
+    joint_max_torque:
+      - 25.0
+      - 25.0
+      - 25.0
+      - 25.0
+    wheel_max_torque:
+      - 3.436926
+      - 3.436926
+      - 3.436926
+      - 3.436926
+
+deformable_infantry_sim_actuator:
+  ros__parameters:
+    joint_names:
+      - left_front_joint
+      - left_back_joint
+      - right_back_joint
+      - right_front_joint
+    wheel_names:
+      - left_front_wheel
+      - left_back_wheel
+      - right_back_wheel
+      - right_front_wheel
+    joint_effort_command_topics:
+      - /sim/chassis/left_front_joint/effort_cmd
+      - /sim/chassis/left_back_joint/effort_cmd
+      - /sim/chassis/right_back_joint/effort_cmd
+      - /sim/chassis/right_front_joint/effort_cmd
+    wheel_effort_command_topics:
+      - /sim/chassis/left_front_wheel/effort_cmd
+      - /sim/chassis/left_back_wheel/effort_cmd
+      - /sim/chassis/right_back_wheel/effort_cmd
+      - /sim/chassis/right_front_wheel/effort_cmd
+
+adaptive_joint_support_observer:
+  ros__parameters:
+    dt: 0.001
+    b0: 0.60
+    eso_w0: 250.0
+    eso_auto_beta: true
+    eso_z3_limit: 1e9
+
+adaptive_contact_estimator:
+  ros__parameters:
+    wheel_radius: 0.055
+    radius_base: 0.2341741
+    pivot_offset: 0.0
+    body_length: 0.23276
+    body_width: 0.23276
+    arm_length: 0.140
+    confidence_alpha: 0.15
+    support_force_alpha: 0.20
+    support_reference_rise_alpha: 0.05
+    support_reference_fall_alpha: 0.002
+    moving_speed_threshold: 1.0
+    slip_ratio_gain: 1.5
+    wheel_torque_reference: 0.8
+    joint_torque_reference: 5.0
+    local_support_low_ratio: 0.45
+    local_support_high_ratio: 0.80
+    global_support_low_ratio: 0.60
+    global_support_high_ratio: 0.90
+    shock_support_jump_ratio: 0.35
+    shock_angle_rate_threshold_deg: 40.0
+    shock_joint_rate_threshold_deg: 220.0
+    shock_residual_threshold: 0.35
+    shock_hold_time: 0.15
+    quasi_static_speed_threshold: 0.25
+    quasi_static_angle_rate_threshold_deg: 4.0
+    quasi_static_joint_rate_threshold_deg: 35.0
+    quasi_static_residual_threshold: 0.20
+    quasi_static_hold_time: 0.30
+    reference_update_load_share_threshold: 0.08
+    load_share_floor: 0.05
+    confidence_floor: 0.15
+
+adaptive_active_suspension:
+  ros__parameters:
+    # control_mode:
+    #   auto  = normal active suspension
+    #   debug = bypass active suspension and directly command the four leg physical angles
+    control_mode: debug
+    # Debug angles use the same sign/zero as Isaac Sim /joint_states:
+    #   0 deg = URDF startup pose (the URDF joint origin already contains the built-in 10 deg geometry)
+    # Order: LF, LB, RB, RF
+    debug_target_physical_angle_deg:
+      - 50.0
+      - 50.0
+      - 50.0
+      - 50.0
+    debug_min_angle_deg: 0.0
+    debug_max_angle_deg: 58.0
+    radius_base: 0.2341741
+    pivot_offset: 0.0
+    body_length: 0.23276
+    body_width: 0.23276
+    arm_length: 0.140
+    pivot_z: 0.09341
+    wheel_bottom_offset: 0.100
+    pitch_lever_arm: 0.165586
+    roll_lever_arm: 0.165586
+    min_angle: 20.0
+    max_angle: 58.0
+    target_physical_velocity_limit: 180.0
+    target_physical_acceleration_limit: 720.0
+    heave_gain: 0.9
+    warp_gain: 0.25
+    unload_confidence_threshold: 0.55
+    reload_confidence_threshold: 0.75
+    unload_load_share_threshold: 0.18
+    max_seek_ground_extension: 0.035
+    seek_ground_velocity: 0.25
+    seek_ground_release_velocity: 0.18
+    contact_deadband: 0.05
+    pitch_gain_deg_per_rad: 18.0
+    roll_gain_deg_per_rad: 18.0
+    switch_torque_limit: 1000.0
+    steady_torque_limit: 1000.0
+    angle_error_torque_gain: 40.0
+    low_confidence_torque_boost: 30.0
+
+adaptive_deformable_chassis_controller:
+  ros__parameters:
+    mess: 22.5
+    moment_of_inertia: 1.0
+    wheel_radius: 0.055
+    friction_coefficient: 6.6
+    k1: 2.958580e+00
+    k2: 3.082190e-03
+    no_load_power: 11.37
+    min_contact_weight: 0.15
+
+lf_joint_adrc_controller:
+  ros__parameters:
+    measurement: /chassis/left_front_joint/angle
+    setpoint: /chassis/left_front_joint/target_angle
+    control: /chassis/left_front_joint/control_torque
+    eso_z3_output: /chassis/left_front_joint/eso_z3
+    limit: /chassis/left_front_joint/torque_limit
+    kt: 1.0
+    td_h: 0.001
+    td_r: 50.0
+    dt: 0.001
+    b0: 0.60
+    eso_w0: 250.0
+    eso_auto_beta: true
+    k1: 30.0
+    k2: 17.0
+    alpha1: 0.75
+    alpha2: 0.7
+    delta: 0.02
+    u_min: -200.0
+    u_max: 200.0
+
+lb_joint_adrc_controller:
+  ros__parameters:
+    measurement: /chassis/left_back_joint/angle
+    setpoint: /chassis/left_back_joint/target_angle
+    control: /chassis/left_back_joint/control_torque
+    eso_z3_output: /chassis/left_back_joint/eso_z3
+    limit: /chassis/left_back_joint/torque_limit
+    kt: 1.0
+    td_h: 0.001
+    td_r: 50.0
+    dt: 0.001
+    b0: 0.60
+    eso_w0: 250.0
+    eso_auto_beta: true
+    k1: 30.0
+    k2: 17.0
+    alpha1: 0.75
+    alpha2: 0.7
+    delta: 0.02
+    u_min: -200.0
+    u_max: 200.0
+
+rb_joint_adrc_controller:
+  ros__parameters:
+    measurement: /chassis/right_back_joint/angle
+    setpoint: /chassis/right_back_joint/target_angle
+    control: /chassis/right_back_joint/control_torque
+    eso_z3_output: /chassis/right_back_joint/eso_z3
+    limit: /chassis/right_back_joint/torque_limit
+    kt: 1.0
+    td_h: 0.001
+    td_r: 50.0
+    dt: 0.001
+    b0: 0.60
+    eso_w0: 250.0
+    eso_auto_beta: true
+    k1: 30.0
+    k2: 17.0
+    alpha1: 0.75
+    alpha2: 0.7
+    delta: 0.02
+    u_min: -200.0
+    u_max: 200.0
+
+rf_joint_adrc_controller:
+  ros__parameters:
+    measurement: /chassis/right_front_joint/angle
+    setpoint: /chassis/right_front_joint/target_angle
+    control: /chassis/right_front_joint/control_torque
+    eso_z3_output: /chassis/right_front_joint/eso_z3
+    limit: /chassis/right_front_joint/torque_limit
+    kt: 1.0
+    td_h: 0.001
+    td_r: 50.0
+    dt: 0.001
+    b0: 0.60
+    eso_w0: 250.0
+    eso_auto_beta: true
+    k1: 30.0
+    k2: 17.0
+    alpha1: 0.75
+    alpha2: 0.7
+    delta: 0.02
+    u_min: -200.0
+    u_max: 200.0

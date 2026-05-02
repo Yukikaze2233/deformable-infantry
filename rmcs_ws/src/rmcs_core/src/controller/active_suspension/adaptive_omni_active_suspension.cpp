@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <limits>
 #include <numbers>
+#include <string>
+#include <vector>
 
 #include <eigen3/Eigen/Dense>
 #include <rclcpp/node.hpp>
@@ -11,6 +13,45 @@
 #include <rmcs_executor/component.hpp>
 
 namespace rmcs_core::controller::active_suspension {
+namespace {
+
+template <size_t N>
+std::array<double, N> read_double_array_parameter(
+    const rclcpp::Node& node, const char* name, const std::array<double, N>& defaults) {
+    const auto values = node.get_parameter_or(name, std::vector<double>{defaults.begin(), defaults.end()});
+    if (values.size() == 1) {
+        std::array<double, N> result{};
+        result.fill(values.front());
+        return result;
+    }
+    if (values.size() == N) {
+        std::array<double, N> result{};
+        for (size_t i = 0; i < N; ++i)
+            result[i] = values[i];
+        return result;
+    }
+    return defaults;
+}
+
+template <size_t N>
+std::array<double, N> deg_array_to_rad(const std::array<double, N>& values) {
+    std::array<double, N> result{};
+    for (size_t i = 0; i < N; ++i)
+        result[i] = values[i] * std::numbers::pi / 180.0;
+    return result;
+}
+
+enum class SuspensionControlMode : std::uint8_t {
+    kAuto = 0,
+    kDebug = 1,
+};
+
+SuspensionControlMode parse_control_mode(const std::string& mode) {
+    return (mode == "debug" || mode == "manual") ? SuspensionControlMode::kDebug
+                                                 : SuspensionControlMode::kAuto;
+}
+
+} // namespace
 
 class AdaptiveOmniActiveSuspension
     : public rmcs_executor::Component
@@ -47,6 +88,11 @@ public:
               deg_to_rad(get_parameter_or("target_physical_velocity_limit", 180.0)))
         , target_physical_acceleration_limit_(
               deg_to_rad(get_parameter_or("target_physical_acceleration_limit", 720.0)))
+        , control_mode_(parse_control_mode(get_parameter_or("control_mode", std::string{"auto"})))
+        , debug_min_angle_rad_(deg_to_rad(get_parameter_or("debug_min_angle_deg", 0.0)))
+        , debug_max_angle_rad_(deg_to_rad(get_parameter_or("debug_max_angle_deg", 58.0)))
+        , debug_target_physical_angle_rad_(deg_array_to_rad(read_double_array_parameter(
+              *this, "debug_target_physical_angle_deg", std::array<double, kJointCount>{0.0, 0.0, 0.0, 0.0})))
         , heave_gain_(get_parameter_or("heave_gain", 0.6))
         , warp_gain_(get_parameter_or("warp_gain", 0.6))
         , unload_confidence_threshold_(get_parameter_or("unload_confidence_threshold", 0.55))
@@ -168,14 +214,17 @@ public:
     }
 
     void update() override {
-        const auto base_target_angle = read_required_(
-            lf_base_target_angle_, lb_base_target_angle_, rb_base_target_angle_, rf_base_target_angle_);
-        if (!all_finite_(base_target_angle))
-            return disable_outputs_();
-
         const auto joint_angle =
             read_required_(lf_joint_angle_, lb_joint_angle_, rb_joint_angle_, rf_joint_angle_);
         if (!all_finite_(joint_angle))
+            return disable_outputs_();
+
+        if (control_mode_ == SuspensionControlMode::kDebug)
+            return update_debug_mode_(joint_angle);
+
+        const auto base_target_angle = read_required_(
+            lf_base_target_angle_, lb_base_target_angle_, rb_base_target_angle_, rf_base_target_angle_);
+        if (!all_finite_(base_target_angle))
             return disable_outputs_();
 
         const auto raw_confidence = read_required_(
@@ -291,6 +340,52 @@ private:
     static void reset_seek_ground_state_(SeekGroundState& state) {
         state.extension_radius = 0.0;
         state.active = false;
+    }
+
+    void update_debug_mode_(const std::array<double, 4>& joint_angle) {
+        const double pitch = std::isfinite(*pitch_angle_) ? *pitch_angle_ : 0.0;
+        const double roll = std::isfinite(*roll_angle_) ? *roll_angle_ : 0.0;
+
+        const auto current_clearance = physical_angles_to_clearances_(joint_angle, pitch, roll);
+        if (!all_finite_(current_clearance))
+            return disable_outputs_();
+
+        BodyModes estimated_modes = compute_modes_from_distances_(current_clearance);
+        estimated_modes.heave_radius =
+            *std::min_element(current_clearance.begin(), current_clearance.end());
+        if (pitch_feedback_from_imu_)
+            estimated_modes.pitch_angle = pitch;
+        if (roll_feedback_from_imu_)
+            estimated_modes.roll_angle = roll;
+        if (!all_finite_(estimated_modes))
+            return disable_outputs_();
+
+        publish_modes_(BodyModes{}, estimated_modes);
+
+        if (!trajectory_active_) {
+            trajectory_physical_angle_ = joint_angle;
+            trajectory_physical_velocity_.fill(0.0);
+            trajectory_physical_acceleration_.fill(0.0);
+            trajectory_active_ = true;
+        }
+
+        const auto desired = clamp_debug_target_physical_angle_();
+        step_trajectory_(desired);
+        if (!trajectory_finite_())
+            return disable_outputs_();
+        if (!publish_targets_())
+            return disable_outputs_();
+        if (!update_torque_limits_(joint_angle, std::array<double, 4>{1.0, 1.0, 1.0, 1.0}))
+            return disable_outputs_();
+    }
+
+    std::array<double, 4> clamp_debug_target_physical_angle_() const {
+        std::array<double, 4> desired = debug_target_physical_angle_rad_;
+        const double min_angle = std::min(debug_min_angle_rad_, debug_max_angle_rad_);
+        const double max_angle = std::max(debug_min_angle_rad_, debug_max_angle_rad_);
+        for (double& angle : desired)
+            angle = std::clamp(angle, min_angle, max_angle);
+        return desired;
     }
 
     std::array<double, 4> physical_angles_to_clearances_(
@@ -733,6 +828,10 @@ private:
     const double max_angle_rad_;
     const double target_physical_velocity_limit_;
     const double target_physical_acceleration_limit_;
+    const SuspensionControlMode control_mode_;
+    const double debug_min_angle_rad_;
+    const double debug_max_angle_rad_;
+    const std::array<double, 4> debug_target_physical_angle_rad_;
 
     // Body-mode control gains.
     const double heave_gain_;
