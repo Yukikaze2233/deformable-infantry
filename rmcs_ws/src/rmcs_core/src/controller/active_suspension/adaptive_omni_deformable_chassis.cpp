@@ -211,6 +211,7 @@ private:
         return joint_zero_physical_angle_rad_ - motor_angle_rad;
     }
 
+<<<<<<<< HEAD:rmcs_ws/src/rmcs_core/src/controller/active_suspension/adaptive_omni_deformable_chassis.cpp
     void reset_all_controls() {
         *mode_ = rmcs_msgs::ChassisMode::AUTO;
         chassis_control_velocity_->vector << nan_, nan_, nan_;
@@ -225,6 +226,21 @@ private:
         joint_target_active_ = false;
 
         publish_nan_joint_targets();
+========
+    void scope_motor_control() {
+        if (current_target_angle_ == min_angle_ && *mode_ != rmcs_msgs::ChassisMode::SPIN){
+            // *scope_motor_control_torque = -0.3;
+            // if (*scope_motor_velocity <= std::abs(0.1)){
+            //     *scope_motor_control_torque = 0.18 * 1.0 / 36.0;
+            // }
+        }
+        else{
+            // *scope_motor_control_torque = 0.3;
+            // if (*scope_motor_velocity <= std::abs(0.1)){
+            //     *scope_motor_control_torque = -0.18 * 1.0 / 36.0;
+            // }
+        }
+>>>>>>>> ab86bdbf5d59eab51b4e0008daf9f6ac73de44ad:rmcs_ws/src/rmcs_core/src/controller/chassis/deformable_chassis.cpp
     }
 
     void update_velocity_control() {
