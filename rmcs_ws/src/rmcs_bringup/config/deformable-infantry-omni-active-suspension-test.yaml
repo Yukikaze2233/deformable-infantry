@@ -148,9 +148,7 @@ adaptive_active_suspension:
     contact_deadband: 0.05
     pitch_gain_deg_per_rad: 18.0
     roll_gain_deg_per_rad: 18.0
-    switch_torque_limit: 120.0
-    steady_torque_limit: 35.0
-    angle_error_torque_gain: 40.0
+    torque_limit: 200.0
     low_confidence_torque_boost: 30.0
 
 gimbal_controller:

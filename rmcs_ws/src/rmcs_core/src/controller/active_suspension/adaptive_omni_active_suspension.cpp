@@ -104,9 +104,7 @@ public:
         , contact_deadband_(get_parameter_or("contact_deadband", 0.05))
         , pitch_gain_(deg_to_rad(get_parameter_or("pitch_gain_deg_per_rad", 5.0)))
         , roll_gain_(deg_to_rad(get_parameter_or("roll_gain_deg_per_rad", 5.0)))
-        , switch_torque_limit_(get_parameter_or("switch_torque_limit", 120.0))
-        , steady_torque_limit_(get_parameter_or("steady_torque_limit", 35.0))
-        , angle_error_torque_gain_(get_parameter_or("angle_error_torque_gain", 40.0))
+        , torque_limit_(get_parameter_or("torque_limit", get_parameter_or("steady_torque_limit", 35.0)))
         , low_confidence_torque_boost_(get_parameter_or("low_confidence_torque_boost", 30.0)) {
 
         register_input("/chassis/left_front_joint/base_target_physical_angle", lf_base_target_angle_);
@@ -187,10 +185,10 @@ public:
             "/chassis/right_front_joint/target_physical_acceleration",
             rf_target_physical_acceleration_, nan_);
 
-        register_output("/chassis/left_front_joint/torque_limit", lf_torque_limit_, steady_torque_limit_);
-        register_output("/chassis/left_back_joint/torque_limit", lb_torque_limit_, steady_torque_limit_);
-        register_output("/chassis/right_back_joint/torque_limit", rb_torque_limit_, steady_torque_limit_);
-        register_output("/chassis/right_front_joint/torque_limit", rf_torque_limit_, steady_torque_limit_);
+        register_output("/chassis/left_front_joint/torque_limit", lf_torque_limit_, torque_limit_);
+        register_output("/chassis/left_back_joint/torque_limit", lb_torque_limit_, torque_limit_);
+        register_output("/chassis/right_back_joint/torque_limit", rb_torque_limit_, torque_limit_);
+        register_output("/chassis/right_front_joint/torque_limit", rf_torque_limit_, torque_limit_);
 
         register_output("/chassis/body/heave_reference", heave_reference_, nan_);
         register_output("/chassis/body/pitch_reference", pitch_reference_, nan_);
@@ -276,17 +274,11 @@ public:
             return disable_outputs_();
         if (!publish_targets_())
             return disable_outputs_();
-        if (!update_torque_limits_(joint_angle, confidence))
+        if (!update_torque_limits_(confidence))
             return disable_outputs_();
     }
 
 private:
-    struct SwitchState {
-        double last_target = nan_;
-        std::uint64_t ticks_since_switch = 0;
-        bool switch_active = false;
-    };
-
     struct SeekGroundState {
         double extension_radius = 0.0;
         bool active = false;
@@ -302,8 +294,6 @@ private:
     static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
     static constexpr double joint_zero_physical_angle_rad_ = 62.5 * std::numbers::pi / 180.0;
     static constexpr double dt_ = 1e-3;
-    static constexpr std::uint64_t high_torque_hold_ticks_ = 500;
-    static constexpr double torque_decay_rate_ = 8.0;
     static constexpr std::array<double, 4> ones_sign_ = {1.0, 1.0, 1.0, 1.0};
     static constexpr std::array<double, 4> pitch_sign_ = {-1.0, 1.0, 1.0, -1.0};
     static constexpr std::array<double, 4> roll_sign_ = {-1.0, -1.0, 1.0, 1.0};
@@ -329,12 +319,6 @@ private:
     static bool all_finite_(const BodyModes& modes) {
         return std::isfinite(modes.heave_radius) && std::isfinite(modes.pitch_angle)
             && std::isfinite(modes.roll_angle) && std::isfinite(modes.warp_radius);
-    }
-
-    static void reset_switch_state_(SwitchState& switch_state) {
-        switch_state.last_target = nan_;
-        switch_state.ticks_since_switch = 0;
-        switch_state.switch_active = false;
     }
 
     static void reset_seek_ground_state_(SeekGroundState& state) {
@@ -375,7 +359,7 @@ private:
             return disable_outputs_();
         if (!publish_targets_())
             return disable_outputs_();
-        if (!update_torque_limits_(joint_angle, std::array<double, 4>{1.0, 1.0, 1.0, 1.0}))
+        if (!update_torque_limits_(std::array<double, 4>{1.0, 1.0, 1.0, 1.0}))
             return disable_outputs_();
     }
 
@@ -707,70 +691,27 @@ private:
         return true;
     }
 
-    bool update_torque_limits_(
-        const std::array<double, 4>& current_angle, const std::array<double, 4>& confidence) {
-        const std::array<double, 4> target_angle = trajectory_physical_angle_;
-        update_joint_torque_limit_(
-            target_angle[kLeftFront], current_angle[kLeftFront], confidence[kLeftFront],
-            lf_switch_state_, *lf_torque_limit_);
-        update_joint_torque_limit_(
-            target_angle[kLeftBack], current_angle[kLeftBack], confidence[kLeftBack], lb_switch_state_,
-            *lb_torque_limit_);
-        update_joint_torque_limit_(
-            target_angle[kRightBack], current_angle[kRightBack], confidence[kRightBack],
-            rb_switch_state_, *rb_torque_limit_);
-        update_joint_torque_limit_(
-            target_angle[kRightFront], current_angle[kRightFront], confidence[kRightFront],
-            rf_switch_state_, *rf_torque_limit_);
+    bool update_torque_limits_(const std::array<double, 4>& confidence) {
+        update_joint_torque_limit_(confidence[kLeftFront], *lf_torque_limit_);
+        update_joint_torque_limit_(confidence[kLeftBack], *lb_torque_limit_);
+        update_joint_torque_limit_(confidence[kRightBack], *rb_torque_limit_);
+        update_joint_torque_limit_(confidence[kRightFront], *rf_torque_limit_);
         return all_finite_(
             std::array<double, 4>{*lf_torque_limit_, *lb_torque_limit_, *rb_torque_limit_, *rf_torque_limit_});
     }
 
-    void update_joint_torque_limit_(
-        double current_target_angle, double current_angle, double confidence, SwitchState& switch_state,
-        double& torque_limit) const {
-        const double angle_error = std::abs(current_target_angle - current_angle);
-        const double steady_limit = std::clamp(
-            steady_torque_limit_ + angle_error_torque_gain_ * angle_error
-                + low_confidence_torque_boost_ * (1.0 - std::clamp(confidence, 0.0, 1.0)),
-            0.0, switch_torque_limit_);
-        if (!std::isfinite(steady_limit)) {
-            torque_limit = steady_torque_limit_;
+    void update_joint_torque_limit_(double confidence, double& torque_limit) const {
+        const double confidence_adjusted_limit =
+            torque_limit_ + low_confidence_torque_boost_ * (1.0 - std::clamp(confidence, 0.0, 1.0));
+        if (!std::isfinite(confidence_adjusted_limit)) {
+            torque_limit = torque_limit_;
             return;
         }
-
-        if (!std::isfinite(switch_state.last_target)
-            || std::abs(current_target_angle - switch_state.last_target) > 1e-4) {
-            switch_state.last_target = current_target_angle;
-            switch_state.ticks_since_switch = 0;
-            switch_state.switch_active = true;
-        } else if (switch_state.switch_active) {
-            ++switch_state.ticks_since_switch;
-        }
-
-        if (!switch_state.switch_active) {
-            torque_limit = steady_limit;
-            return;
-        }
-
-        if (switch_state.ticks_since_switch <= high_torque_hold_ticks_) {
-            torque_limit = switch_torque_limit_;
-            return;
-        }
-
-        const double decay_per_tick = std::exp(-torque_decay_rate_ * dt_);
-        const double decay =
-            std::pow(decay_per_tick, switch_state.ticks_since_switch - high_torque_hold_ticks_);
-        torque_limit = std::max(
-            steady_limit, steady_limit + (switch_torque_limit_ - steady_limit) * decay);
+        torque_limit = std::max(0.0, confidence_adjusted_limit);
     }
 
     void disable_outputs_() {
         trajectory_active_ = false;
-        reset_switch_state_(lf_switch_state_);
-        reset_switch_state_(lb_switch_state_);
-        reset_switch_state_(rb_switch_state_);
-        reset_switch_state_(rf_switch_state_);
         reset_seek_ground_state_(lf_seek_ground_state_);
         reset_seek_ground_state_(lb_seek_ground_state_);
         reset_seek_ground_state_(rb_seek_ground_state_);
@@ -796,10 +737,10 @@ private:
         *rb_target_physical_acceleration_ = nan_;
         *rf_target_physical_acceleration_ = nan_;
 
-        *lf_torque_limit_ = steady_torque_limit_;
-        *lb_torque_limit_ = steady_torque_limit_;
-        *rb_torque_limit_ = steady_torque_limit_;
-        *rf_torque_limit_ = steady_torque_limit_;
+        *lf_torque_limit_ = torque_limit_;
+        *lb_torque_limit_ = torque_limit_;
+        *rb_torque_limit_ = torque_limit_;
+        *rf_torque_limit_ = torque_limit_;
 
         *heave_reference_ = nan_;
         *pitch_reference_ = nan_;
@@ -849,20 +790,13 @@ private:
     const double seek_ground_release_velocity_;
 
     // Joint torque-limit scheduling.
-    const double switch_torque_limit_;
-    const double steady_torque_limit_;
-    const double angle_error_torque_gain_;
+    const double torque_limit_;
     const double low_confidence_torque_boost_;
 
     bool trajectory_active_ = false;
     std::array<double, 4> trajectory_physical_angle_ = {0.0, 0.0, 0.0, 0.0};
     std::array<double, 4> trajectory_physical_velocity_ = {0.0, 0.0, 0.0, 0.0};
     std::array<double, 4> trajectory_physical_acceleration_ = {0.0, 0.0, 0.0, 0.0};
-
-    SwitchState lf_switch_state_;
-    SwitchState lb_switch_state_;
-    SwitchState rb_switch_state_;
-    SwitchState rf_switch_state_;
 
     SeekGroundState lf_seek_ground_state_;
     SeekGroundState lb_seek_ground_state_;

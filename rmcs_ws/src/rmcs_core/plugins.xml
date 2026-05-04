@@ -25,6 +25,8 @@
   <class type="rmcs_core::controller::chassis::WheelDemoController" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::chassis::ChassisControllerV2" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::chassis::ChassisTestV2Controller" base_class_type="rmcs_executor::Component" />
+  <class type="rmcs_core::controller::chassis::DirectTorqueDebugController" base_class_type="rmcs_executor::Component" />
+  <class type="rmcs_core::controller::chassis::JointMappingDiagnosticController" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::chassis::ActiveSuspension" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::active_suspension::AdaptiveOmniDeformableChassis" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::active_suspension::AdaptiveOmniImuAttitude" base_class_type="rmcs_executor::Component" />

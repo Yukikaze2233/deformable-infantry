@@ -23,7 +23,7 @@ except ImportError as exc:  # pragma: no cover - runtime dependency
 
 import omni.timeline
 from omni.physx import get_physx_interface
-from isaacsim.core.prims import SingleArticulation, SingleRigidPrim
+from isaacsim.core.prims import SingleArticulation
 from isaacsim.sensors.physics import _sensor
 
 
@@ -43,15 +43,31 @@ class IsaacZenohBridgeConfig:
     endpoint: str = "tcp/0.0.0.0:7447"
     articulation_prim: str = "/World/deformable_infantry_omni/base_link"
     imu_prim: str = "/World/deformable_infantry_omni/base_link/sensor"
-    imu_fallback_rigid_prim: str = "/World/deformable_infantry_omni/base_link"
-    actuated_dof_names: List[str] = field(
+    imu_fallback_frame_prim: str = "/World/deformable_infantry_omni/base_link"
+    logical_actuated_dof_names: List[str] = field(
         default_factory=lambda: [
-            "left_back_joint",
             "left_front_joint",
+            "left_back_joint",
             "right_back_joint",
             "right_front_joint",
-            "left_back_wheel",
             "left_front_wheel",
+            "left_back_wheel",
+            "right_back_wheel",
+            "right_front_wheel",
+        ]
+    )
+    # Map RMCS logical motor names to the actual Isaac DOF names.
+    # The current imported asset appears mirrored left/right, so the defaults
+    # below route logical left commands to the actual right-side DOFs and
+    # logical right commands to the actual left-side DOFs.
+    actual_actuated_dof_names: List[str] = field(
+        default_factory=lambda: [
+            "left_front_joint",
+            "left_back_joint",
+            "right_back_joint",
+            "right_front_joint",
+            "left_front_wheel",
+            "left_back_wheel",
             "right_back_wheel",
             "right_front_wheel",
         ]
@@ -68,7 +84,6 @@ class IsaacZenohBridge:
         self.timeline = omni.timeline.get_timeline_interface()
         self.imu = _sensor.acquire_imu_sensor_interface()
         self.articulation = SingleArticulation(prim_path=cfg.articulation_prim, name="rmcs_bridge_articulation")
-        self.base_rigid = SingleRigidPrim(cfg.imu_fallback_rigid_prim, "rmcs_bridge_base")
         self._command_lock = threading.Lock()
         self._latest_command = {}
         self._pub_joint = self.session.declare_publisher(cfg.zenoh_joint_state_key)
@@ -78,7 +93,11 @@ class IsaacZenohBridge:
         self._last_init_error = 0.0
         self._last_runtime_error = 0.0
         self._actuated_indices: List[int] = []
-        self._actuated_names: List[str] = []
+        self._logical_names: List[str] = []
+        self._actual_names: List[str] = []
+        self._actual_index_by_logical_name: Dict[str, int] = {}
+        self._effort_mode_configured = False
+        self._effort_mode_indices: List[int] = []
         self._sub = get_physx_interface().subscribe_physics_step_events(self._on_physics_step)
         print(f"IsaacZenohBridge ready mode={cfg.mode} endpoint={cfg.endpoint}")
 
@@ -87,30 +106,100 @@ class IsaacZenohBridge:
             return True
         try:
             self.articulation.initialize()
-            self.base_rigid.initialize()
         except Exception as exc:
             now = time.time()
             if now - self._last_init_error > 1.0:
                 print(f"IsaacZenohBridge waiting for physics scene: {exc}")
                 self._last_init_error = now
             return False
+        if len(self.cfg.logical_actuated_dof_names) != len(self.cfg.actual_actuated_dof_names):
+            print(
+                "IsaacZenohBridge configuration error: logical_actuated_dof_names and "
+                "actual_actuated_dof_names must have the same length."
+            )
+            return False
+
         dof_names = list(self.articulation.dof_names)
         self._actuated_indices = []
-        self._actuated_names = []
+        self._logical_names = []
+        self._actual_names = []
+        self._actual_index_by_logical_name = {}
+        self._effort_mode_indices = []
         missing_names = []
-        for name in self.cfg.actuated_dof_names:
-            if name in dof_names:
-                self._actuated_indices.append(dof_names.index(name))
-                self._actuated_names.append(name)
+        for logical_name, actual_name in zip(
+            self.cfg.logical_actuated_dof_names, self.cfg.actual_actuated_dof_names
+        ):
+            if actual_name in dof_names:
+                index = dof_names.index(actual_name)
+                self._actuated_indices.append(index)
+                self._logical_names.append(logical_name)
+                self._actual_names.append(actual_name)
+                self._actual_index_by_logical_name[logical_name] = index
             else:
-                missing_names.append(name)
+                missing_names.append((logical_name, actual_name))
         self._initialized = True
         print("IsaacZenohBridge initialized")
         print("DOF names:", dof_names)
-        print("Actuated DOFs:", self._actuated_names)
+        print("Logical actuated DOFs:", self._logical_names)
+        print("Actual actuated DOFs:", self._actual_names)
+        print("Actuated DOF mapping:")
+        for logical_name, actual_name, index in zip(
+            self._logical_names, self._actual_names, self._actuated_indices
+        ):
+            print(f"  {logical_name} -> {actual_name} (dof_index={index})")
+
+        # For effort control, disable USD joint drives not only on the mapped
+        # actuation DOFs, but also on coupled carrier joints imported from URDF
+        # mimic chains. Otherwise those hidden drives can fight external
+        # set_joint_efforts() commands.
+        candidate_names = set(self._actual_names)
+        for name in dof_names:
+            if name.endswith("_carrier_joint"):
+                candidate_names.add(name)
+        self._effort_mode_indices = [dof_names.index(name) for name in candidate_names if name in dof_names]
+        print("Effort mode DOFs:")
+        for index in sorted(self._effort_mode_indices):
+            print(f"  {dof_names[index]} (dof_index={index})")
+
+        try:
+            dof_props = self.articulation.dof_properties
+            joint_positions = np.asarray(self.articulation.get_joint_positions()).reshape(-1)
+            print("DOF properties:")
+            for i, name in enumerate(dof_names):
+                prop = dof_props[i]
+                pos = float(joint_positions[i]) if i < len(joint_positions) else float("nan")
+                print(
+                    "  "
+                    f"{name}: index={i}, pos={pos:.6f}, "
+                    f"type={prop['type']}, driveMode={prop['driveMode']}, "
+                    f"maxEffort={prop['maxEffort']:.6f}, maxVelocity={prop['maxVelocity']:.6f}, "
+                    f"stiffness={prop['stiffness']:.6f}, damping={prop['damping']:.6f}, "
+                    f"lower={prop['lower']:.6f}, upper={prop['upper']:.6f}"
+                )
+        except Exception as exc:
+            print(f"IsaacZenohBridge failed to dump DOF properties: {exc}")
         if missing_names:
             print("Missing actuated DOFs:", missing_names)
         return True
+
+    def _configure_effort_mode(self):
+        if self._effort_mode_configured or not self._effort_mode_indices:
+            return
+        try:
+            zero_gains = np.zeros((len(self._effort_mode_indices),), dtype=np.float32)
+            joint_indices = np.asarray(self._effort_mode_indices, dtype=np.int64)
+            self.articulation._articulation_view.set_gains(
+                kps=zero_gains.reshape(1, -1),
+                kds=zero_gains.reshape(1, -1),
+                joint_indices=joint_indices,
+            )
+            self._effort_mode_configured = True
+            print("IsaacZenohBridge configured effort mode DOFs (stiffness=0, damping=0).")
+        except Exception as exc:
+            now = time.time()
+            if now - self._last_runtime_error > 1.0:
+                print(f"IsaacZenohBridge failed to configure effort mode: {exc}")
+                self._last_runtime_error = now
 
     def _on_command(self, sample):
         with self._command_lock:
@@ -127,7 +216,7 @@ class IsaacZenohBridge:
         velocities = velocities_all[self._actuated_indices].tolist()
         efforts = efforts_all[self._actuated_indices].tolist()
         payload = {
-            "name": self._actuated_names,
+            "name": self._logical_names,
             "position": positions,
             "velocity": velocities,
             "effort": efforts,
@@ -162,9 +251,18 @@ class IsaacZenohBridge:
                 "stamp": time.time(),
             }
         else:
-            _, orientation = self.base_rigid.get_world_pose()
+            try:
+                _, orientation = self.articulation.get_world_pose()
+                frame_id = self.cfg.imu_fallback_frame_prim or self.cfg.articulation_prim
+            except Exception as exc:
+                now = time.time()
+                if now - self._last_runtime_error > 1.0:
+                    print(f"IsaacZenohBridge IMU fallback pose unavailable, using identity: {exc}")
+                    self._last_runtime_error = now
+                orientation = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+                frame_id = self.cfg.articulation_prim
             payload = {
-                "frame_id": self.cfg.imu_fallback_rigid_prim,
+                "frame_id": frame_id,
                 "orientation": {
                     "x": float(orientation[1]),
                     "y": float(orientation[2]),
@@ -180,16 +278,35 @@ class IsaacZenohBridge:
     def _apply_efforts(self):
         with self._command_lock:
             cmd = dict(self._latest_command)
-        dof_names = list(self.articulation.dof_names)
-        efforts = np.zeros((len(dof_names),), dtype=np.float64)
+        efforts = np.zeros((len(self.articulation.dof_names),), dtype=np.float64)
+        applied_debug = []
         for topic, value in cmd.get("joint_efforts", {}).items():
-            name = topic.split("/")[-2]
-            if name in self._actuated_names and name in dof_names:
-                efforts[dof_names.index(name)] = float(value)
+            logical_name = topic.split("/")[-2]
+            if logical_name in self._actual_index_by_logical_name:
+                index = self._actual_index_by_logical_name[logical_name]
+                efforts[index] = float(value)
+                if abs(float(value)) > 1e-9:
+                    applied_debug.append((topic, logical_name, index, float(value)))
         for topic, value in cmd.get("wheel_efforts", {}).items():
-            name = topic.split("/")[-2]
-            if name in self._actuated_names and name in dof_names:
-                efforts[dof_names.index(name)] = float(value)
+            logical_name = topic.split("/")[-2]
+            if logical_name in self._actual_index_by_logical_name:
+                index = self._actual_index_by_logical_name[logical_name]
+                efforts[index] = float(value)
+                if abs(float(value)) > 1e-9:
+                    applied_debug.append((topic, logical_name, index, float(value)))
+        if applied_debug:
+            now = time.time()
+            if not hasattr(self, "_last_effort_debug_time"):
+                self._last_effort_debug_time = 0.0
+            if now - self._last_effort_debug_time > 0.5:
+                print("IsaacZenohBridge non-zero effort commands:")
+                for topic, logical_name, index, value in applied_debug:
+                    actual_name = self.articulation.dof_names[index]
+                    print(
+                        f"  {topic} -> {logical_name} -> {actual_name} "
+                        f"(dof_index={index}) = {value}"
+                    )
+                self._last_effort_debug_time = now
         if efforts.any():
             self.articulation.set_joint_efforts(efforts)
 
@@ -199,11 +316,13 @@ class IsaacZenohBridge:
         if not self._ensure_initialized():
             return
         try:
+            self._configure_effort_mode()
             self._apply_efforts()
             self._publish_joint_state()
             self._publish_imu()
         except Exception as exc:
             self._initialized = False
+            self._effort_mode_configured = False
             now = time.time()
             if now - self._last_runtime_error > 1.0:
                 print(f"IsaacZenohBridge lost physics view, reinitializing: {exc}")
@@ -211,10 +330,22 @@ class IsaacZenohBridge:
 
     def close(self):
         self._sub = None
-        self._sub_cmd.undeclare()
-        self._pub_joint.undeclare()
-        self._pub_imu.undeclare()
-        self.session.close()
+        for attr_name in ("_sub_cmd", "_pub_joint", "_pub_imu"):
+            handle = getattr(self, attr_name, None)
+            if handle is None:
+                continue
+            try:
+                handle.undeclare()
+            except Exception:
+                pass
+            setattr(self, attr_name, None)
+        session = getattr(self, "session", None)
+        if session is not None:
+            try:
+                session.close()
+            except Exception:
+                pass
+            self.session = None
 
 
 # Keep a single global instance alive in Script Editor state.
