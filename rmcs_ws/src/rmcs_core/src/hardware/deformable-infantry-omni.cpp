@@ -89,7 +89,7 @@ public:
 
     void command_update() {
         const bool even = ((cmd_tick_++ & 1u) == 0u);
-        rmcs_board_->command_update(even);
+        rmcs_board_lite->command_update(even);
         top_board_->command_update();
     }
 
