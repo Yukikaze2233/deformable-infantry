@@ -86,14 +86,14 @@ chassis_controller:
 
 gimbal_controller:
   ros__parameters:
-    inertia: 0.0  # kg·m²
+    inertia: 0.5  # kg·m²
     friction: 0.0  # Nm/(rad/s)
 
     upper_limit: -0.60 # -35 deg
     lower_limit: 0.06 # 6 deg
     use_encoder_pitch: true
 
-    yaw_angle_kp: 8.0
+    yaw_angle_kp: 15.0
     yaw_angle_ki: 0.0
     yaw_angle_kd: 0.0
 
