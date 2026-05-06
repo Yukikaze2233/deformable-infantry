@@ -39,6 +39,8 @@ value_broadcaster:
       - /gimbal/yaw/target_angle
       - /gimbal/pitch/angle
       - /gimbal/pitch/target_angle
+      - /gimbal/pitch/pid_feedback_torque
+      - /gimbal/pitch/gravity_feedforward_torque
 
 deformable_infantry:
   ros__parameters:
@@ -108,7 +110,9 @@ gimbal_controller:
     pitch_velocity_ki: 0.0
     pitch_velocity_kd: 0.0
 
-    pitch_torque_control: false
+    pitch_torque_control: true
+    pitch_gravity_ff_gain: 0.0
+    pitch_gravity_ff_phase: 0.0
 
 friction_wheel_controller:
   ros__parameters:

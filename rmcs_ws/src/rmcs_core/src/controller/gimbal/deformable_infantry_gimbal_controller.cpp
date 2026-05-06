@@ -36,6 +36,8 @@ public:
         // Feedforward parameters
         yaw_inertia_ = get_parameter("inertia").as_double();
         yaw_friction_ = get_parameter("friction").as_double();
+        pitch_gravity_ff_gain_ = get_parameter_or("pitch_gravity_ff_gain", 0.0);
+        pitch_gravity_ff_phase_ = get_parameter_or("pitch_gravity_ff_phase", 0.0);
     }
 
     auto update() -> void override {
@@ -98,11 +100,18 @@ public:
         *output_.yaw_control_torque = yaw_feedforward + yaw_feedback;
         if (pitch_torque_control_enabled_) {
             *output_.pitch_control_velocity = kNaN;
-            *output_.pitch_control_torque =
+            const double pitch_pid_torque =
                 pitch_velocity_pid_.update(pitch_velocity_ref - *input_.pitch_velocity_imu);
+            const double pitch_gravity_feedforward =
+                 (pitch_gravity_ff_gain_ * std::sin(*input_.pitch_angle - pitch_gravity_ff_phase_));
+            *output_.pitch_pid_feedback_torque = pitch_pid_torque;
+            *output_.pitch_gravity_feedforward_torque = pitch_gravity_feedforward;
+            *output_.pitch_control_torque = pitch_pid_torque + pitch_gravity_feedforward;
         } else {
             pitch_velocity_pid_.reset();
             *output_.pitch_control_velocity = pitch_velocity_ref;
+            *output_.pitch_pid_feedback_torque = kNaN;
+            *output_.pitch_gravity_feedforward_torque = kNaN;
             *output_.pitch_control_torque = kNaN;
         }
     }
@@ -164,6 +173,11 @@ private:
             component.register_output(
                 "/gimbal/pitch/control_velocity", pitch_control_velocity, kNaN);
             component.register_output("/gimbal/pitch/control_torque", pitch_control_torque, kNaN);
+            component.register_output(
+                "/gimbal/pitch/pid_feedback_torque", pitch_pid_feedback_torque, kNaN);
+            component.register_output(
+                "/gimbal/pitch/gravity_feedforward_torque",
+                pitch_gravity_feedforward_torque, kNaN);
             component.register_output("/gimbal/yaw/control_angle_error", yaw_angle_error, kNaN);
             component.register_output("/gimbal/pitch/control_angle_error", pitch_angle_error, kNaN);
             component.register_output("/gimbal/yaw/target_angle", yaw_target_angle, kNaN);
@@ -173,6 +187,8 @@ private:
         OutputInterface<double> yaw_control_torque;
         OutputInterface<double> pitch_control_velocity;
         OutputInterface<double> pitch_control_torque;
+        OutputInterface<double> pitch_pid_feedback_torque;
+        OutputInterface<double> pitch_gravity_feedforward_torque;
         OutputInterface<double> yaw_angle_error;
         OutputInterface<double> pitch_angle_error;
         OutputInterface<double> yaw_target_angle;
@@ -210,6 +226,8 @@ private:
         *output_.yaw_control_torque = kNaN;
         *output_.pitch_control_velocity = kNaN;
         *output_.pitch_control_torque = kNaN;
+        *output_.pitch_pid_feedback_torque = kNaN;
+        *output_.pitch_gravity_feedforward_torque = kNaN;
     }
 
     auto reset_all_controls() -> void {
@@ -260,6 +278,8 @@ private:
     // Feedforward parameters
     double yaw_inertia_;
     double yaw_friction_;
+    double pitch_gravity_ff_gain_ = 0.0;
+    double pitch_gravity_ff_phase_ = 0.0;
     double last_yaw_velocity_ref_ = kNaN;
     double filtered_yaw_accel_ = kNaN;
 };
