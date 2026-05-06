@@ -2,8 +2,13 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <numbers>
+#include <string>
 
+#include <eigen3/Eigen/Dense>
 #include <rclcpp/node.hpp>
+#include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 #include <rmcs_msgs/chassis_mode.hpp>
 #include <rmcs_msgs/game_stage.hpp>
@@ -12,10 +17,12 @@
 #include "referee/app/ui/shape/shape.hpp"
 #include "referee/app/ui/widget/crosshair_circle.hpp"
 #include "referee/app/ui/widget/deformable_chassis_top_view.hpp"
+#include "referee/app/ui/widget/pitch_hud.hpp"
 #include "referee/app/ui/widget/status_ring.hpp"
 
 namespace rmcs_core::referee::app::ui {
 using namespace std::chrono_literals;
+using namespace rmcs_description;
 
 class Infantry
     : public rmcs_executor::Component
@@ -32,8 +39,9 @@ public:
               {Shape::Color::WHITE, 2, x_center, 800, x_center, y_center + 110},
               {Shape::Color::WHITE, 2, x_center, y_center - 110, x_center, 200})
         , chassis_direction_indicator_(Shape::Color::PINK, 8, x_center, y_center, 0, 0, 84, 84)
+        , pitch_hud_(PitchHud::Config{1540, y_center, 180, 30.0, 5.0})
         , time_reminder_(Shape::Color::PINK, 50, 5, x_center + 150, y_center + 65, 0, false) {
-
+        
         double deformable_leg_min_angle_deg = 8.0;
         double deformable_leg_max_angle_deg = 58.0;
         get_parameter_or(
@@ -48,6 +56,7 @@ public:
         register_input("/chassis/control_mode", chassis_mode_);
 
         register_input("/chassis/angle", chassis_angle_);
+        register_input("/chassis/imu/pitch", chassis_pitch_, false);
 
         register_input("/chassis/supercap/voltage", supercap_voltage_);
         register_input("/chassis/supercap/enabled", supercap_enabled_);
@@ -73,10 +82,12 @@ public:
         register_input("/gimbal/left_friction/control_velocity", left_friction_control_velocity_);
         register_input("/gimbal/left_friction/velocity", left_friction_velocity_);
         register_input("/gimbal/right_friction/velocity", right_friction_velocity_);
+        register_input("/gimbal/pitch/angle", gimbal_pitch_angle_, false);
 
         register_input("/remote/mouse", mouse_);
 
         register_input("/referee/game/stage", game_stage_);
+        register_input("/tf", tf_, false);
 
         // register_input("/auto_aim/ui_target", auto_aim_target_, false);
     }
@@ -93,9 +104,33 @@ public:
         status_ring_.update_battery_power(*chassis_voltage_);
 
         status_ring_.update_auto_aim_enable(mouse_->right == 1);
+        pitch_hud_.update(
+            current_gimbal_pitch_(),
+            (chassis_pitch_.ready() && std::isfinite(*chassis_pitch_))
+                ? *chassis_pitch_
+                : std::numeric_limits<double>::quiet_NaN());
     }
 
 private:
+    double current_gimbal_pitch_() const {
+        if (gimbal_pitch_source_ == "encoder") {
+            if (!gimbal_pitch_angle_.ready() || !std::isfinite(*gimbal_pitch_angle_))
+                return std::numeric_limits<double>::quiet_NaN();
+            return std::remainder(*gimbal_pitch_angle_, 2.0 * std::numbers::pi);
+        }
+
+        if (!tf_.ready())
+            return std::numeric_limits<double>::quiet_NaN();
+
+        auto direction = fast_tf::cast<OdomImu>(PitchLink::DirectionVector{Eigen::Vector3d::UnitX()}, *tf_);
+        Eigen::Vector3d vector = *direction;
+        if (vector.squaredNorm() <= 1e-18)
+            return std::numeric_limits<double>::quiet_NaN();
+
+        vector.normalize();
+        return std::atan2(-vector.z(), std::hypot(vector.x(), vector.y()));
+    }
+
     void update_time_reminder() {
         if (!game_stage_.ready())
             return;
@@ -143,6 +178,7 @@ private:
 
     InputInterface<rmcs_msgs::ChassisMode> chassis_mode_;
     InputInterface<double> chassis_angle_;
+    InputInterface<double> chassis_pitch_;
 
     InputInterface<double> supercap_voltage_;
     InputInterface<bool> supercap_enabled_;
@@ -159,12 +195,16 @@ private:
     InputInterface<double> left_friction_control_velocity_;
     InputInterface<double> left_friction_velocity_;
     InputInterface<double> right_friction_velocity_;
+    InputInterface<double> gimbal_pitch_angle_;
 
     InputInterface<rmcs_msgs::Mouse> mouse_;
 
     InputInterface<rmcs_msgs::GameStage> game_stage_;
+    InputInterface<Tf> tf_;
 
     // InputInterface<std::pair<uint16_t, uint16_t>> auto_aim_target_;
+
+    std::string gimbal_pitch_source_ = "imu_board";
 
     CrossHairCircle crosshair_circle_;
     StatusRing status_ring_;
@@ -174,6 +214,7 @@ private:
 
     Arc chassis_direction_indicator_;
     DeformableChassisLegArcs deformable_chassis_leg_arcs_;
+    PitchHud pitch_hud_;
 
     Integer time_reminder_;
 };
