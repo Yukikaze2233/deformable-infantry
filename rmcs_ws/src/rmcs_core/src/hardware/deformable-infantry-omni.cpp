@@ -294,7 +294,7 @@ private:
                     std::atan2(2.0 * (q0 * q1 + q2 * q3), 1.0 - 2.0 * (q1 * q1 + q2 * q2));
 
                 // Export chassis attitude using the requested convention:
-                // pitch < 0 when the front is higher, roll > 0 when the left side is higher.
+                // pitch < 0 when the front is higher, roll > 0 when the right side is higher.
                 *chassis_imu_pitch_ = -standard_pitch;
                 *chassis_imu_roll_ = standard_roll;
                 *chassis_imu_pitch_rate_ = -imu_.gy();
