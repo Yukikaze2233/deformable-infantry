@@ -21,6 +21,10 @@ rmcs_executor:
       - rmcs_core::controller::pid::PidController -> bullet_feeder_velocity_pid_controller
 
       - rmcs_core::controller::chassis::DeformableChassis -> chassis_controller
+      # - rmcs_core::chassis::suspension::AngleCalculate -> suspension_angle_calculate
+      # - rmcs_core::chassis::suspension::AngleOutput -> suspension_angle_output
+      # - rmcs_core::controller::adrc::AdrcController -> pitch_attitude_adrc
+      # - rmcs_core::controller::adrc::AdrcController -> roll_attitude_adrc
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::DeformableOmniWheelController -> deformable_chassis_controller
 
@@ -62,7 +66,7 @@ chassis_controller:
     # Deploy geometry / chassis-owned joint intent
     min_angle: 7.0
     max_angle: 58.0
-    active_suspension_enable: true
+    active_suspension_enable: false
 
     # IMU attitude correction at min-angle stance.
     # pitch < 0: front high. roll > 0: right high.
@@ -84,6 +88,58 @@ chassis_controller:
     # When all four requested joint targets stay equal for 2s, average pitch/roll from 2s to 5s.
     chassis_imu_calibration_wait_s: 2.0
     chassis_imu_calibration_sample_s: 3.0
+
+suspension_angle_calculate:
+  ros__parameters:
+    pitch_offset_deg: 0.0
+    roll_offset_deg: 0.0
+
+suspension_angle_output:
+  ros__parameters:
+    min_angle: 7.0
+    max_angle: 58.0
+   
+pitch_attitude_adrc:
+  ros__parameters:
+    measurement: /chassis/suspension/pitch_error
+    control: /chassis/suspension/pitch_angle_diff
+    dt: 0.001
+    b0: 1.0
+    kt: 1.0
+    td_h: 0.001
+    td_r: 12.0
+    eso_w0: 40.0
+    eso_auto_beta: true
+    k1: 4.0
+    k2: 1.5
+    alpha1: 0.75
+    alpha2: 0.7
+    delta: 0.02
+    u_min: -0.10
+    u_max: 0.10
+    output_min: -0.10
+    output_max: 0.10
+
+roll_attitude_adrc:
+  ros__parameters:
+    measurement: /chassis/suspension/roll_error
+    control: /chassis/suspension/roll_angle_diff
+    dt: 0.001
+    b0: 1.0
+    kt: 1.0
+    td_h: 0.001
+    td_r: 12.0
+    eso_w0: 40.0
+    eso_auto_beta: true
+    k1: 4.0
+    k2: 1.5
+    alpha1: 0.75
+    alpha2: 0.7
+    delta: 0.02
+    u_min: -0.10
+    u_max: 0.10
+    output_min: -0.10
+    output_max: 0.10
 
 gimbal_controller:
   ros__parameters:
@@ -184,7 +240,7 @@ lf_joint_controller:
     # Joint-local servo inputs produced by chassis intent generation
     measurement_angle: /chassis/left_front_joint/physical_angle
     measurement_velocity: /chassis/left_front_joint/physical_velocity
-    setpoint_angle: /chassis/left_front_joint/target_physical_angle
+    setpoint_angle: /chassis/suspension/left_front_joint/target_physical_angle
     setpoint_velocity: /chassis/left_front_joint/target_physical_velocity
     mode_input: /chassis/left_front_joint/suspension_mode
     suspension_torque: /chassis/left_front_joint/suspension_torque
@@ -231,7 +287,7 @@ lb_joint_controller:
     # Same joint-servo layout as lf_joint_controller
     measurement_angle: /chassis/left_back_joint/physical_angle
     measurement_velocity: /chassis/left_back_joint/physical_velocity
-    setpoint_angle: /chassis/left_back_joint/target_physical_angle
+    setpoint_angle: /chassis/suspension/left_back_joint/target_physical_angle
     setpoint_velocity: /chassis/left_back_joint/target_physical_velocity
     mode_input: /chassis/left_back_joint/suspension_mode
     suspension_torque: /chassis/left_back_joint/suspension_torque
@@ -272,7 +328,7 @@ rb_joint_controller:
     # Same joint-servo layout as lf_joint_controller
     measurement_angle: /chassis/right_back_joint/physical_angle
     measurement_velocity: /chassis/right_back_joint/physical_velocity
-    setpoint_angle: /chassis/right_back_joint/target_physical_angle
+    setpoint_angle: /chassis/suspension/right_back_joint/target_physical_angle
     setpoint_velocity: /chassis/right_back_joint/target_physical_velocity
     mode_input: /chassis/right_back_joint/suspension_mode
     suspension_torque: /chassis/right_back_joint/suspension_torque
@@ -313,7 +369,7 @@ rf_joint_controller:
     # Same joint-servo layout as lf_joint_controller
     measurement_angle: /chassis/right_front_joint/physical_angle
     measurement_velocity: /chassis/right_front_joint/physical_velocity
-    setpoint_angle: /chassis/right_front_joint/target_physical_angle
+    setpoint_angle: /chassis/suspension/right_front_joint/target_physical_angle
     setpoint_velocity: /chassis/right_front_joint/target_physical_velocity
     mode_input: /chassis/right_front_joint/suspension_mode
     suspension_torque: /chassis/right_front_joint/suspension_torque

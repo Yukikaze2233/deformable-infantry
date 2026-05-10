@@ -3,6 +3,10 @@
 source /opt/ros/jazzy/setup.bash
 
 : "${RMCS_PATH:=/workspaces/RMCS}"
+readonly RMCS_ROS_PREFIX="/opt/ros/jazzy"
+readonly RMCS_BUILD_BASE="build"
+readonly RMCS_INSTALL_BASE="install"
+readonly RMCS_LOG_BASE="log"
 
 if [[ ! -d "${RMCS_PATH}/rmcs_ws" ]]; then
     echo "> ERROR: Workspace not found: ${RMCS_PATH}/rmcs_ws"
@@ -54,8 +58,38 @@ restore_default_dir log
 [[ -x /opt/cmake/bin/cmake ]] &&
     export PATH="/opt/cmake/bin:$PATH"
 
+find_stale_ros_library_reference() {
+    local build_root="$1"
+    local link_file
+    local ros_lib_path
+
+    [[ -d "${build_root}" ]] || return 1
+
+    while IFS= read -r -d '' link_file; do
+        while IFS= read -r ros_lib_path; do
+            [[ -n "${ros_lib_path}" ]] || continue
+
+            if [[ ! -e "${ros_lib_path}" ]]; then
+                printf '%s\n%s\n' "${link_file}" "${ros_lib_path}"
+                return 0
+            fi
+        done < <(grep -oE "${RMCS_ROS_PREFIX}/lib/[^[:space:]]+" "${link_file}" | sort -u)
+    done < <(find "${build_root}" -path '*/link.txt' -type f -print0 2>/dev/null)
+
+    return 1
+}
+
 cmake_toolchain_args=()
 event_handlers_args=()
+colcon_global_args=(
+    --log-base "${RMCS_LOG_BASE}"
+)
+colcon_build_args=(
+    --build-base "${RMCS_BUILD_BASE}"
+    --install-base "${RMCS_INSTALL_BASE}"
+    --symlink-install
+    --merge-install
+)
 
 if [[ "${RMCS_USE_LLVM}" == "ON" ]]; then
     missing_tools=()
@@ -88,8 +122,18 @@ if [[ "${RMCS_USE_LLVM}" == "ON" ]]; then
     )
 fi
 
-colcon_args=(
-    --symlink-install --merge-install
+stale_ros_ref="$(find_stale_ros_library_reference "${RMCS_BUILD_BASE}")"
+if [[ -n "${stale_ros_ref}" ]]; then
+    IFS=$'\n' read -r stale_link_file stale_library_path <<<"${stale_ros_ref}"
+    echo "> Detected stale ROS library reference in ${stale_link_file}"
+    echo "> Missing cached library path: ${stale_library_path}"
+    echo "> Forcing CMake reconfigure to refresh absolute ROS library paths."
+    colcon_build_args+=(
+        --cmake-force-configure
+    )
+fi
+
+colcon_build_args+=(
     "${event_handlers_args[@]}"
 )
 cmake_args=(
@@ -97,4 +141,4 @@ cmake_args=(
 )
 
 CLICOLOR_FORCE=1 NINJA_STATUS="" \
-    colcon build "${colcon_args[@]}" "$@" --cmake-args "${cmake_args[@]}"
+    colcon "${colcon_global_args[@]}" build "${colcon_build_args[@]}" "$@" --cmake-args "${cmake_args[@]}"
