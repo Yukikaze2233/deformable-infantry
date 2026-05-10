@@ -39,7 +39,7 @@ public:
     }
 
 private:
-    double deg_to_rad(double deg) {
+    static double deg_to_rad(double deg) {
         return deg * std::numbers::pi / 180.0;
     }
     double pitch_offset_ = 0.0;
