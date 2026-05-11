@@ -10,7 +10,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rmcs_executor/component.hpp>
 
+#include "active_suspension_geometry.hpp"
+
 namespace rmcs_core::chassis::suspension {
+
+namespace geom = rmcs_core::chassis::suspension::geometry;
 
 class GroundInverseCalculation
     : public rmcs_executor::Component
@@ -23,16 +27,18 @@ public:
         , l_(get_parameter_or("l", 0.0))
         , L_(get_parameter_or("L", 0.0))
         , h_(get_parameter_or("h", 0.0))
-        , plane_normal_(
-              get_parameter_or("a1", 0.0), get_parameter_or("b1", 0.0),
-              get_parameter_or("c1", 1.0))
-        , a_points_({
-              read_point_("point_1"),
-              read_point_("point_2"),
-              read_point_("point_3"),
-              read_point_("point_4"),
-          })
+        , yaw_topic_(get_parameter_or("yaw_topic", std::string("/chassis/imu/yaw")))
+        , pitch_topic_(get_parameter_or("pitch_topic", std::string("/chassis/imu/pitch")))
+        , roll_topic_(get_parameter_or("roll_topic", std::string("/chassis/imu/roll")))
+        , static_yaw_(get_parameter_or("static_yaw", 0.0))
+        , static_pitch_(get_parameter_or("static_pitch", 0.0))
+        , static_roll_(get_parameter_or("static_roll", 0.0))
+        , use_attitude_topics_(get_parameter_or("use_attitude_topics", false))
+        , attitude_in_degrees_(get_parameter_or("attitude_in_degrees", false))
         , angles_in_degrees_(get_parameter_or("angles_in_degrees", false)) {
+        register_input(yaw_topic_, yaw_input_);
+        register_input(pitch_topic_, pitch_input_);
+        register_input(roll_topic_, roll_input_);
         register_input(
             get_parameter_or(
                 "theta_1_topic", std::string("/chassis/suspension/ground_inverse/theta_1")),
@@ -69,236 +75,192 @@ public:
             return;
         }
 
-        Plane plane;
-        if (!solve_(plane)) {
+        geom::LocalGeometry geometry;
+        if (!validate_geometry_(geometry)) {
             publish_nan_outputs_();
             return;
         }
 
-        *plane_a_output_ = plane.a;
-        *plane_b_output_ = plane.b;
-        *plane_c_output_ = plane.c;
+        geom::Plane plane;
+        if (!solve_(geometry, plane)) {
+            publish_nan_outputs_();
+            return;
+        }
+
+        *plane_a_output_ = plane.normal.x;
+        *plane_b_output_ = plane.normal.y;
+        *plane_c_output_ = plane.normal.z;
         *plane_d_output_ = plane.d;
 
-        *slope_pitch_output_ = std::atan2(-plane.a, plane.c);
-        *slope_roll_output_  = std::atan2(-plane.b, plane.c);
-        *slope_tilt_output_  = std::atan2(std::hypot(plane.a, plane.b), plane.c);
+        geom::Plane world_observation_plane;
+        std::string world_plane_error;
+        if (!geom::normalize_plane_to_world_up(plane, world_observation_plane, world_plane_error)) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 2000,
+                "ground_inverse_calculation: %s", world_plane_error.c_str());
+            publish_nan_outputs_();
+            return;
+        }
+
+        // These are world-frame observations against the world xoy plane.
+        *slope_pitch_output_ =
+            std::atan2(-world_observation_plane.normal.x, world_observation_plane.normal.z);
+        *slope_roll_output_ =
+            std::atan2(-world_observation_plane.normal.y, world_observation_plane.normal.z);
+        *slope_tilt_output_ = std::atan2(
+            std::hypot(world_observation_plane.normal.x, world_observation_plane.normal.y),
+            world_observation_plane.normal.z);
+
+        RCLCPP_INFO(get_logger(), "坡度：%f", std::sqrt(plane.normal.x * plane.normal.x + plane.normal.y * plane.normal.y) / plane.normal.z);
     }
 
 private:
-    struct Vec3 {
-        double x;
-        double y;
-        double z;
-
-        Vec3 operator+(const Vec3& other) const {
-            return {x + other.x, y + other.y, z + other.z};
-        }
-
-        Vec3 operator-(const Vec3& other) const {
-            return {x - other.x, y - other.y, z - other.z};
-        }
-
-        Vec3 operator*(double scalar) const {
-            return {x * scalar, y * scalar, z * scalar};
-        }
-    };
-
-    struct Plane {
-        double a;
-        double b;
-        double c;
-        double d;
-    };
-
-    [[nodiscard]] static double dot_(const Vec3& lhs, const Vec3& rhs) {
-        return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
-    }
-
-    [[nodiscard]] static Vec3 cross_(const Vec3& lhs, const Vec3& rhs) {
-        return {
-            lhs.y * rhs.z - lhs.z * rhs.y,
-            lhs.z * rhs.x - lhs.x * rhs.z,
-            lhs.x * rhs.y - lhs.y * rhs.x,
-        };
-    }
-
-    [[nodiscard]] static double norm_(const Vec3& vector) {
-        return std::sqrt(dot_(vector, vector));
-    }
-
-    [[nodiscard]] static bool finite_(const Vec3& vector) {
-        return std::isfinite(vector.x) && std::isfinite(vector.y) && std::isfinite(vector.z);
-    }
-
-    [[nodiscard]] Vec3 read_point_(const std::string& prefix) const {
-        return {
-            get_parameter_or(prefix + "_x", 0.0),
-            get_parameter_or(prefix + "_y", 0.0),
-            get_parameter_or(prefix + "_z", 0.0),
-        };
-    }
-
     [[nodiscard]] bool inputs_ready_() const {
-        return std::all_of(theta_inputs_.begin(), theta_inputs_.end(), [](const auto& input) {
-            return input.ready() && std::isfinite(*input);
-        });
+        const bool theta_ready =
+            std::all_of(theta_inputs_.begin(), theta_inputs_.end(), [](const auto& input) {
+                return input.ready() && std::isfinite(*input);
+            });
+        if (!theta_ready) {
+            return false;
+        }
+
+        if (!use_attitude_topics_) {
+            return std::isfinite(static_yaw_) && std::isfinite(static_pitch_) && std::isfinite(static_roll_);
+        }
+
+        return yaw_input_.ready() && std::isfinite(*yaw_input_) && pitch_input_.ready()
+            && std::isfinite(*pitch_input_) && roll_input_.ready() && std::isfinite(*roll_input_);
     }
 
     void publish_nan_outputs_() {
-        *plane_a_output_    = nan_;
-        *plane_b_output_    = nan_;
-        *plane_c_output_    = nan_;
-        *plane_d_output_    = nan_;
+        *plane_a_output_     = nan_;
+        *plane_b_output_     = nan_;
+        *plane_c_output_     = nan_;
+        *plane_d_output_     = nan_;
         *slope_pitch_output_ = nan_;
         *slope_roll_output_  = nan_;
         *slope_tilt_output_  = nan_;
     }
 
-    [[nodiscard]] bool solve_(Plane& plane) const {
-        if (!validate_geometry_()) {
-            return false;
-        }
-
-        const double normal_norm = norm_(plane_normal_);
-        const Vec3 n             = plane_normal_ * (1.0 / normal_norm);
-
-        std::array<Vec3, 4> b_points;
-        std::array<double, 4> normal_distances{};
-
-        for (std::size_t i = 0; i < a_points_.size(); ++i) {
-            const double theta = normalized_theta_(theta_inputs_[i]);
-            if (!std::isfinite(theta) || theta < -tolerance_ || theta > std::numbers::pi / 2 + tolerance_) {
-                RCLCPP_WARN_THROTTLE(
-                    get_logger(), *get_clock(), 2000,
-                    "ground_inverse_calculation: theta_%zu is outside [0, pi/2].", i + 1);
-                return false;
-            }
-
-            const double point_radius = norm_(a_points_[i]);
-            if (point_radius <= tolerance_) {
-                return false;
-            }
-
-            const Vec3 radial_direction = a_points_[i] * (1.0 / point_radius);
-            b_points[i] = a_points_[i] + radial_direction * (L_ * std::cos(theta))
-                - n * (L_ * std::sin(theta));
-            normal_distances[i] = L_ * std::sin(theta);
-        }
-
-        const double min_distance =
-            *std::min_element(normal_distances.begin(), normal_distances.end());
-        if (std::abs(min_distance - h_) > consistency_tolerance_) {
-            RCLCPP_WARN_THROTTLE(
-                get_logger(), *get_clock(), 2000,
-                "ground_inverse_calculation: h is inconsistent with L * sin(theta_i).");
-            return false;
-        }
-
-        const Vec3 edge_12 = b_points[1] - b_points[0];
-        const Vec3 edge_13 = b_points[2] - b_points[0];
-        const Vec3 edge_14 = b_points[3] - b_points[0];
-
-        Vec3 normal = cross_(edge_12, edge_13);
-        const double normal_length = norm_(normal);
-        if (normal_length <= tolerance_) {
-            normal = cross_(edge_12, edge_14);
-        }
-
-        if (norm_(normal) <= tolerance_) {
-            RCLCPP_WARN_THROTTLE(
-                get_logger(), *get_clock(), 2000,
-                "ground_inverse_calculation: B_i plane is degenerate.");
-            return false;
-        }
-
-        const double coplanarity_error = dot_(normal, edge_14);
-        const double scale =
-            std::max({1.0, norm_(edge_12), norm_(edge_13), norm_(edge_14)});
-        if (std::abs(coplanarity_error) > coplanarity_tolerance_ * scale * scale * scale) {
-            RCLCPP_WARN_THROTTLE(
-                get_logger(), *get_clock(), 2000,
-                "ground_inverse_calculation: computed B_i are not coplanar.");
-            return false;
-        }
-
-        const double inv_normal_length = 1.0 / norm_(normal);
-        normal                         = normal * inv_normal_length;
-        if (normal.z < 0.0) {
-            normal = normal * -1.0;
-        }
-
-        plane.a = normal.x;
-        plane.b = normal.y;
-        plane.c = normal.z;
-        plane.d = dot_(normal, b_points[0]);
-        return true;
-    }
-
-    [[nodiscard]] bool validate_geometry_() const {
-        if (!finite_(plane_normal_) || !std::isfinite(l_) || !std::isfinite(L_) || !std::isfinite(h_)
-            || l_ <= 0.0 || L_ <= 0.0 || h_ < 0.0) {
+    [[nodiscard]] bool validate_geometry_(geom::LocalGeometry& geometry) const {
+        if (!std::isfinite(l_) || !std::isfinite(L_) || !std::isfinite(h_) || L_ <= 0.0 || h_ < 0.0) {
             RCLCPP_WARN_THROTTLE(
                 get_logger(), *get_clock(), 2000,
                 "ground_inverse_calculation: invalid yaml parameters.");
             return false;
         }
 
-        const double normal_norm = norm_(plane_normal_);
-        if (normal_norm <= tolerance_) {
+        const double yaw = normalized_attitude_(use_attitude_topics_ ? *yaw_input_ : static_yaw_);
+        const double pitch = normalized_attitude_(use_attitude_topics_ ? *pitch_input_ : static_pitch_);
+        const double roll = normalized_attitude_(use_attitude_topics_ ? *roll_input_ : static_roll_);
+
+        std::string error;
+        if (!geom::build_local_geometry_from_attitude(yaw, pitch, roll, l_, geometry, error)) {
             RCLCPP_WARN_THROTTLE(
                 get_logger(), *get_clock(), 2000,
-                "ground_inverse_calculation: plane normal must be non-zero.");
+                "ground_inverse_calculation: %s", error.c_str());
             return false;
         }
 
-        const double target_radius = l_ / std::sqrt(2.0);
-        for (const auto& point : a_points_) {
-            if (!finite_(point)) {
+        return true;
+    }
+
+    [[nodiscard]] bool solve_(const geom::LocalGeometry& geometry, geom::Plane& plane) const {
+        std::array<geom::Vec3, 4> b_points;
+        std::array<double, 4> normal_distances{};
+
+        for (std::size_t i = 0; i < b_points.size(); ++i) {
+            const double theta = normalized_theta_(theta_inputs_[i]);
+            if (!std::isfinite(theta) || theta < -geom::kTolerance || theta > std::numbers::pi / 2 + geom::kTolerance) {
+                RCLCPP_WARN_THROTTLE(
+                    get_logger(), *get_clock(), 2000,
+                    "ground_inverse_calculation: theta_%zu is outside [0, pi/2].", i + 1);
                 return false;
             }
 
-            const double plane_residual = dot_(plane_normal_, point);
-            if (std::abs(plane_residual) > geometry_tolerance_ * std::max(1.0, normal_norm)) {
-                RCLCPP_WARN_THROTTLE(
-                    get_logger(), *get_clock(), 2000,
-                    "ground_inverse_calculation: A_i is not on the configured square plane.");
-                return false;
-            }
+            b_points[i] = geometry.points[i]
+                + geometry.radial_directions[i] * (L_ * std::cos(theta))
+                - geometry.n * (L_ * std::sin(theta));
+            normal_distances[i] = L_ * std::sin(theta);
+        }
 
-            const double radius = norm_(point);
-            if (std::abs(radius - target_radius) > geometry_tolerance_) {
-                RCLCPP_WARN_THROTTLE(
-                    get_logger(), *get_clock(), 2000,
-                    "ground_inverse_calculation: A_i radius is inconsistent with l.");
-                return false;
-            }
+        const double min_distance =
+            *std::min_element(normal_distances.begin(), normal_distances.end());
+        if (std::abs(min_distance - h_) > geom::kGeometryTolerance * std::max(1.0, L_)) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 2000,
+                "ground_inverse_calculation: h is inconsistent with L * sin(theta_i).");
+            return false;
+        }
+
+        const geom::Vec3 edge_12 = b_points[1] - b_points[0];
+        const geom::Vec3 edge_13 = b_points[2] - b_points[0];
+        const geom::Vec3 edge_14 = b_points[3] - b_points[0];
+
+        geom::Vec3 raw_normal = geom::cross(edge_12, edge_13);
+        if (geom::norm(raw_normal) <= geom::kTolerance) {
+            raw_normal = geom::cross(edge_12, edge_14);
+        }
+
+        if (geom::norm(raw_normal) <= geom::kTolerance) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 2000,
+                "ground_inverse_calculation: B_i plane is degenerate.");
+            return false;
+        }
+
+        const double coplanarity_error = geom::dot(raw_normal, edge_14);
+        const double scale =
+            std::max({1.0, geom::norm(edge_12), geom::norm(edge_13), geom::norm(edge_14)});
+        if (std::abs(coplanarity_error) > geom::kValidationTolerance * scale * scale * scale) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 2000,
+                "ground_inverse_calculation: computed B_i are not coplanar.");
+            return false;
+        }
+
+        geom::Plane candidate_plane{
+            .normal = raw_normal,
+            .d      = geom::dot(raw_normal, b_points[0]),
+        };
+
+        std::string error;
+        if (!geom::normalize_plane(candidate_plane, geometry.n, plane, error)) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 2000,
+                "ground_inverse_calculation: %s", error.c_str());
+            return false;
         }
 
         return true;
     }
 
     [[nodiscard]] double normalized_theta_(const InputInterface<double>& input) const {
-        double theta = std::abs(*input);
-        if (angles_in_degrees_) {
-            theta *= std::numbers::pi / 180.0;
-        }
-        return theta;
+        return geom::to_radians(*input, angles_in_degrees_);
     }
 
-    static constexpr double nan_                   = std::numeric_limits<double>::quiet_NaN();
-    static constexpr double tolerance_             = 1e-9;
-    static constexpr double geometry_tolerance_    = 1e-5;
-    static constexpr double consistency_tolerance_ = 1e-5;
-    static constexpr double coplanarity_tolerance_ = 1e-6;
+    [[nodiscard]] double normalized_attitude_(double angle) const {
+        return geom::to_radians(angle, attitude_in_degrees_);
+    }
+
+    static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
 
     double l_;
     double L_;
     double h_;
-    Vec3 plane_normal_;
-    std::array<Vec3, 4> a_points_;
+    std::string yaw_topic_;
+    std::string pitch_topic_;
+    std::string roll_topic_;
+    double static_yaw_;
+    double static_pitch_;
+    double static_roll_;
+    bool use_attitude_topics_ = false;
+    bool attitude_in_degrees_ = false;
     bool angles_in_degrees_ = false;
 
+    InputInterface<double> yaw_input_;
+    InputInterface<double> pitch_input_;
+    InputInterface<double> roll_input_;
     std::array<InputInterface<double>, 4> theta_inputs_;
 
     OutputInterface<double> plane_a_output_;

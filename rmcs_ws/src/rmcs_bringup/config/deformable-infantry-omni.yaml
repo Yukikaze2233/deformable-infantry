@@ -21,10 +21,9 @@ rmcs_executor:
       - rmcs_core::controller::pid::PidController -> bullet_feeder_velocity_pid_controller
 
       - rmcs_core::controller::chassis::DeformableChassis -> chassis_controller
-      # - rmcs_core::chassis::suspension::AngleCalculate -> suspension_angle_calculate
-      # - rmcs_core::chassis::suspension::AngleOutput -> suspension_angle_output
-      # - rmcs_core::controller::adrc::AdrcController -> pitch_attitude_adrc
-      # - rmcs_core::controller::adrc::AdrcController -> roll_attitude_adrc
+      - rmcs_core::chassis::suspension::GroundInverseCalculation -> ground_inverse_calculation
+      - rmcs_core::chassis::suspension::PoseForwardKinematics -> pose_forward_kinematics
+
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::DeformableOmniWheelController -> deformable_chassis_controller
 
@@ -98,6 +97,45 @@ suspension_angle_output:
   ros__parameters:
     min_angle: 7.0
     max_angle: 58.0
+
+ground_inverse_calculation:
+  ros__parameters:
+    # A-plane geometry generated from the square center at the world origin.
+    l: 0.23276
+    L: 0.140
+    h: 0.0182804
+    output_prefix: /chassis/suspension/ground_inverse
+    use_attitude_topics: false
+    attitude_in_degrees: false
+    yaw_topic: /chassis/imu/yaw
+    pitch_topic: /chassis/imu/pitch
+    roll_topic: /chassis/imu/roll
+    static_yaw: 0.0
+    static_pitch: 0.0
+    static_roll: 0.0
+    theta_1_topic: /chassis/right_front_joint/physical_angle
+    theta_2_topic: /chassis/right_back_joint/physical_angle
+    theta_3_topic: /chassis/left_back_joint/physical_angle
+    theta_4_topic: /chassis/left_front_joint/physical_angle
+    angles_in_degrees: false
+
+pose_forward_kinematics:
+  ros__parameters:
+    # Fixed horizontal A-plane forward solve with yaw-only in-plane orientation.
+    # Plane input is taken explicitly from ground_inverse_calculation.
+    l: 0.23276
+    L: 0.140
+    h: 0.02431   #最大高度-0.2155
+    a_topic: /chassis/suspension/ground_inverse/plane/a
+    b_topic: /chassis/suspension/ground_inverse/plane/b
+    c_topic: /chassis/suspension/ground_inverse/plane/c
+    d_topic: /chassis/suspension/ground_inverse/plane/d
+    output_prefix: /chassis/suspension/pose_forward_kinematics
+    use_yaw_topic: false
+    yaw_in_degrees: false
+    yaw_topic: /chassis/imu/yaw
+    static_yaw: 0.0
+    angles_in_degrees: false
    
 pitch_attitude_adrc:
   ros__parameters:
