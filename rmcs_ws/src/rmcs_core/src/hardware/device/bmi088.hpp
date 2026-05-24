@@ -60,6 +60,7 @@ public:
     double ax() const { return ax_; }
     double ay() const { return ay_; }
     double az() const { return az_; }
+    
 
     double gx() const { return gx_; }
     double gy() const { return gy_; }
