@@ -24,10 +24,14 @@ rmcs_executor:
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::WheelDemoController -> deformable_chassis_controller
 
-      - rmcs_core::controller::chassis::DeformableJointController -> lf_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> lb_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> rb_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> rf_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> lf_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> lb_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> rb_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> rf_joint_controller
+      - rmcs_core::chassis::suspension::GroundContactConfidenceEstimator -> lf_ground_contact_confidence
+      - rmcs_core::chassis::suspension::GroundContactConfidenceEstimator -> lb_ground_contact_confidence
+      - rmcs_core::chassis::suspension::GroundContactConfidenceEstimator -> rb_ground_contact_confidence
+      - rmcs_core::chassis::suspension::GroundContactConfidenceEstimator -> rf_ground_contact_confidence
 
       - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
 
@@ -40,6 +44,30 @@ value_broadcaster:
       - /gimbal/pitch/target_angle
       - /gimbal/pitch/pid_feedback_torque
       - /gimbal/pitch/gravity_feedforward_torque
+      - /chassis/left_front_joint/eso_z3
+      - /chassis/left_front_joint/ground_contact_confidence
+      - /chassis/left_front_joint/ground_contact_z3_score
+      - /chassis/left_front_joint/ground_contact_block_score
+      - /chassis/left_front_joint/ground_contact_tracking_score
+      - /chassis/left_front_joint/ground_contact_torque_score
+      - /chassis/left_back_joint/eso_z3
+      - /chassis/left_back_joint/ground_contact_confidence
+      - /chassis/left_back_joint/ground_contact_z3_score
+      - /chassis/left_back_joint/ground_contact_block_score
+      - /chassis/left_back_joint/ground_contact_tracking_score
+      - /chassis/left_back_joint/ground_contact_torque_score
+      - /chassis/right_back_joint/eso_z3
+      - /chassis/right_back_joint/ground_contact_confidence
+      - /chassis/right_back_joint/ground_contact_z3_score
+      - /chassis/right_back_joint/ground_contact_block_score
+      - /chassis/right_back_joint/ground_contact_tracking_score
+      - /chassis/right_back_joint/ground_contact_torque_score
+      - /chassis/right_front_joint/eso_z3
+      - /chassis/right_front_joint/ground_contact_confidence
+      - /chassis/right_front_joint/ground_contact_z3_score
+      - /chassis/right_front_joint/ground_contact_block_score
+      - /chassis/right_front_joint/ground_contact_tracking_score
+      - /chassis/right_front_joint/ground_contact_torque_score
 
 deformable_infantry:
   ros__parameters:
@@ -60,29 +88,9 @@ chassis_controller:
     # Deploy geometry / chassis-owned joint intent
     min_angle: 20.0
     max_angle: 50.0
-    active_suspension_enable: true
     spin_ratio: 0.3
-
-    # IMU attitude correction at min-angle stance.
-    # pitch < 0: front high. roll > 0: right high.
-    active_suspension_Kp: 8.0
-    active_suspension_pitch_ki: 0.35
-    active_suspension_Dp: 0.28
-    active_suspension_Kr: 8.0
-    active_suspension_roll_ki: 0.35
-    active_suspension_Dr: 0.28
-    active_suspension_pitch_angle_diff_limit_deg: 45.0
-    active_suspension_roll_angle_diff_limit_deg: 45.0
-    active_suspension_pid_integral_limit_deg: 20.0
-
-    # Chassis-owned joint intent trajectory limits while attitude correction is active.
-    active_suspension_target_velocity_limit_deg: 80.0
-    active_suspension_target_acceleration_limit_deg: 360.0
-
-    # Automatic IMU mounting-error calibration.
-    # When all four requested joint targets stay equal for 2s, average pitch/roll from 2s to 5s.
-    chassis_imu_calibration_wait_s: 2.0
-    chassis_imu_calibration_sample_s: 3.0
+    target_physical_velocity_limit: 80.0
+    target_physical_acceleration_limit: 360.0
 
 gimbal_controller:
   ros__parameters:
@@ -180,16 +188,10 @@ deformable_chassis_controller:
 
 lf_joint_controller:
   ros__parameters:
-    # Joint-local servo inputs produced by chassis intent generation
-    measurement_angle: /chassis/left_front_joint/physical_angle
-    measurement_velocity: /chassis/left_front_joint/physical_velocity
-    setpoint_angle: /chassis/left_front_joint/target_physical_angle
-    setpoint_velocity: /chassis/left_front_joint/target_physical_velocity
-    mode_input: /chassis/left_front_joint/suspension_mode
-    suspension_torque: /chassis/left_front_joint/suspension_torque
+    measurement: /chassis/left_front_joint/physical_angle
+    setpoint: /chassis/left_front_joint/target_physical_angle
+    eso_z3_output: /chassis/left_front_joint/eso_z3
     control: /chassis/left_front_joint/control_torque
-
-    # Normal ADRC servo mode
     dt: 0.001
     b0: -1.0
     kt: 1.0
@@ -207,33 +209,11 @@ lf_joint_controller:
     output_min: -200.0
     output_max: 200.0
 
-    # Suspension ADRC servo mode
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-
-    # Joint-local feedforward / limit shaping
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0
-
 lb_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
-    measurement_angle: /chassis/left_back_joint/physical_angle
-    measurement_velocity: /chassis/left_back_joint/physical_velocity
-    setpoint_angle: /chassis/left_back_joint/target_physical_angle
-    setpoint_velocity: /chassis/left_back_joint/target_physical_velocity
-    mode_input: /chassis/left_back_joint/suspension_mode
-    suspension_torque: /chassis/left_back_joint/suspension_torque
+    measurement: /chassis/left_back_joint/physical_angle
+    setpoint: /chassis/left_back_joint/target_physical_angle
+    eso_z3_output: /chassis/left_back_joint/eso_z3
     control: /chassis/left_back_joint/control_torque
     dt: 0.001
     b0: -1.0
@@ -251,30 +231,12 @@ lb_joint_controller:
     u_max: 200.0
     output_min: -200.0
     output_max: 200.0
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0
 
 rb_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
-    measurement_angle: /chassis/right_back_joint/physical_angle
-    measurement_velocity: /chassis/right_back_joint/physical_velocity
-    setpoint_angle: /chassis/right_back_joint/target_physical_angle
-    setpoint_velocity: /chassis/right_back_joint/target_physical_velocity
-    mode_input: /chassis/right_back_joint/suspension_mode
-    suspension_torque: /chassis/right_back_joint/suspension_torque
+    measurement: /chassis/right_back_joint/physical_angle
+    setpoint: /chassis/right_back_joint/target_physical_angle
+    eso_z3_output: /chassis/right_back_joint/eso_z3
     control: /chassis/right_back_joint/control_torque
     dt: 0.001
     b0: -1.0
@@ -292,30 +254,12 @@ rb_joint_controller:
     u_max: 200.0
     output_min: -200.0
     output_max: 200.0
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0
 
 rf_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
-    measurement_angle: /chassis/right_front_joint/physical_angle
-    measurement_velocity: /chassis/right_front_joint/physical_velocity
-    setpoint_angle: /chassis/right_front_joint/target_physical_angle
-    setpoint_velocity: /chassis/right_front_joint/target_physical_velocity
-    mode_input: /chassis/right_front_joint/suspension_mode
-    suspension_torque: /chassis/right_front_joint/suspension_torque
+    measurement: /chassis/right_front_joint/physical_angle
+    setpoint: /chassis/right_front_joint/target_physical_angle
+    eso_z3_output: /chassis/right_front_joint/eso_z3
     control: /chassis/right_front_joint/control_torque
     dt: 0.001
     b0: -1.0
@@ -333,17 +277,71 @@ rf_joint_controller:
     u_max: 200.0
     output_min: -200.0
     output_max: 200.0
-    suspension_td_h: 0.001
-    suspension_td_r: 12.0
-    suspension_eso_w0: 80.0
-    suspension_k1: 6.0
-    suspension_k2: 3.0
-    suspension_alpha1: 0.75
-    suspension_alpha2: 0.7
-    suspension_delta: 0.02
-    suspension_u_min: -35.0
-    suspension_u_max: 35.0
-    suspension_output_min: -35.0
-    suspension_output_max: 35.0
-    torque_feedforward_gain: 0.0
-    suspension_torque_feedforward_gain: -1.0
+
+lf_ground_contact_confidence:
+  ros__parameters:
+    joint_name: left_front_joint
+    dt: 0.001
+    measurement_angle: /chassis/left_front_joint/physical_angle
+    measurement_velocity: /chassis/left_front_joint/physical_velocity
+    setpoint_angle: /chassis/left_front_joint/target_physical_angle
+    setpoint_velocity: /chassis/left_front_joint/target_physical_velocity
+    control_torque: /chassis/left_front_joint/control_torque
+    joint_torque: /chassis/left_front_joint/torque
+    eso_z3: /chassis/left_front_joint/eso_z3
+    ground_contact_confidence: /chassis/left_front_joint/ground_contact_confidence
+    ground_contact_z3_score: /chassis/left_front_joint/ground_contact_z3_score
+    ground_contact_block_score: /chassis/left_front_joint/ground_contact_block_score
+    ground_contact_tracking_score: /chassis/left_front_joint/ground_contact_tracking_score
+    ground_contact_torque_score: /chassis/left_front_joint/ground_contact_torque_score
+
+lb_ground_contact_confidence:
+  ros__parameters:
+    joint_name: left_back_joint
+    dt: 0.001
+    measurement_angle: /chassis/left_back_joint/physical_angle
+    measurement_velocity: /chassis/left_back_joint/physical_velocity
+    setpoint_angle: /chassis/left_back_joint/target_physical_angle
+    setpoint_velocity: /chassis/left_back_joint/target_physical_velocity
+    control_torque: /chassis/left_back_joint/control_torque
+    joint_torque: /chassis/left_back_joint/torque
+    eso_z3: /chassis/left_back_joint/eso_z3
+    ground_contact_confidence: /chassis/left_back_joint/ground_contact_confidence
+    ground_contact_z3_score: /chassis/left_back_joint/ground_contact_z3_score
+    ground_contact_block_score: /chassis/left_back_joint/ground_contact_block_score
+    ground_contact_tracking_score: /chassis/left_back_joint/ground_contact_tracking_score
+    ground_contact_torque_score: /chassis/left_back_joint/ground_contact_torque_score
+
+rb_ground_contact_confidence:
+  ros__parameters:
+    joint_name: right_back_joint
+    dt: 0.001
+    measurement_angle: /chassis/right_back_joint/physical_angle
+    measurement_velocity: /chassis/right_back_joint/physical_velocity
+    setpoint_angle: /chassis/right_back_joint/target_physical_angle
+    setpoint_velocity: /chassis/right_back_joint/target_physical_velocity
+    control_torque: /chassis/right_back_joint/control_torque
+    joint_torque: /chassis/right_back_joint/torque
+    eso_z3: /chassis/right_back_joint/eso_z3
+    ground_contact_confidence: /chassis/right_back_joint/ground_contact_confidence
+    ground_contact_z3_score: /chassis/right_back_joint/ground_contact_z3_score
+    ground_contact_block_score: /chassis/right_back_joint/ground_contact_block_score
+    ground_contact_tracking_score: /chassis/right_back_joint/ground_contact_tracking_score
+    ground_contact_torque_score: /chassis/right_back_joint/ground_contact_torque_score
+
+rf_ground_contact_confidence:
+  ros__parameters:
+    joint_name: right_front_joint
+    dt: 0.001
+    measurement_angle: /chassis/right_front_joint/physical_angle
+    measurement_velocity: /chassis/right_front_joint/physical_velocity
+    setpoint_angle: /chassis/right_front_joint/target_physical_angle
+    setpoint_velocity: /chassis/right_front_joint/target_physical_velocity
+    control_torque: /chassis/right_front_joint/control_torque
+    joint_torque: /chassis/right_front_joint/torque
+    eso_z3: /chassis/right_front_joint/eso_z3
+    ground_contact_confidence: /chassis/right_front_joint/ground_contact_confidence
+    ground_contact_z3_score: /chassis/right_front_joint/ground_contact_z3_score
+    ground_contact_block_score: /chassis/right_front_joint/ground_contact_block_score
+    ground_contact_tracking_score: /chassis/right_front_joint/ground_contact_tracking_score
+    ground_contact_torque_score: /chassis/right_front_joint/ground_contact_torque_score

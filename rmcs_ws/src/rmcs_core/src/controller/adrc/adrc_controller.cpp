@@ -40,7 +40,14 @@ public:
             use_error_input_mode_ = true;
         }
 
-        register_output(get_parameter("control").as_string(), control_);
+        register_output(
+            get_parameter("control").as_string(), control_,
+            std::numeric_limits<double>::quiet_NaN());
+        if (has_parameter("eso_z3_output")) {
+            register_output(
+                get_parameter("eso_z3_output").as_string(), eso_z3_output_,
+                std::numeric_limits<double>::quiet_NaN());
+        }
 
         kt_ = get_parameter_or("kt", 1.0);
         b0_ = get_parameter_or("b0", 1.0);
@@ -101,6 +108,9 @@ public:
 
         const double final_u = std::clamp(scaled_u, output_min_, output_max_);
         *control_ = final_u;
+        if (eso_z3_output_.active()) {
+            *eso_z3_output_ = eso_out.z3;
+        }
         last_u_ = final_u;
     }
 
@@ -134,6 +144,9 @@ private:
 
     void disable_output_() {
         *control_ = std::numeric_limits<double>::quiet_NaN();
+        if (eso_z3_output_.active()) {
+            *eso_z3_output_ = std::numeric_limits<double>::quiet_NaN();
+        }
         last_u_ = 0.0;
     }
 
@@ -178,6 +191,7 @@ private:
     InputInterface<double> limit_;
 
     OutputInterface<double> control_;
+    OutputInterface<double> eso_z3_output_;
 
     TD td_;
     ESO eso_;
