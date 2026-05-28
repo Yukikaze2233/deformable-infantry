@@ -204,7 +204,7 @@ private:
     static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
 
     const Eigen::Vector2d upper_limit_, lower_limit_;
-    bool use_encoder_pitch_;
+    bool use_encoder_pitch_ = false;
 
     rmcs_executor::Component::InputInterface<double> gimbal_pitch_angle_;
     rmcs_executor::Component::InputInterface<Tf> tf_;

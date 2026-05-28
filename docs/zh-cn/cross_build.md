@@ -31,13 +31,13 @@
 build-rmcs-cross --target-arch arm64
 ```
 
-适用于 `linux/amd64` 的 `latest-full` 变体。
+适用于 `linux/arm64` 的 `latest-full` 变体。
 
 ```bash
 build-rmcs-cross --target-arch amd64
 ```
 
-适用于 `linux/arm64` 的 `latest-full` 变体。
+适用于 `linux/amd64` 的 `latest-full` 变体。
 
 例如，可追加常见 `colcon build` 参数：
 
