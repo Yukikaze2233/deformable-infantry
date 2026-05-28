@@ -546,7 +546,7 @@ private:
                 gimbal_bullet_feeder_.store_status(data.can_data);
             }
         }
-
+        //test
         void can3_receive_callback(const librmcs::data::CanDataView& data) override {
             if (data.is_extended_can_id || data.is_remote_transmission)
                 return;
