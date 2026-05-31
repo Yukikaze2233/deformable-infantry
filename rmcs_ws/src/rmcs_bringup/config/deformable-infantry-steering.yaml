@@ -24,10 +24,10 @@ rmcs_executor:
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::DeformableChassisController -> deformable_chassis_controller
 
-      - rmcs_core::controller::chassis::DeformableJointController -> lf_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> lb_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> rb_joint_controller
-      - rmcs_core::controller::chassis::DeformableJointController -> rf_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> lf_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> lb_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> rb_joint_controller
+      - rmcs_core::controller::adrc::AdrcController -> rf_joint_controller
 
       # - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
 
@@ -54,33 +54,11 @@ deformable_infantry:
 
 chassis_controller:
   ros__parameters:
-    # Deploy geometry / chassis-owned joint intent
     min_angle: 20.0
     max_angle: 50.0
-    active_suspension_enable: true
     spin_ratio: 1.0
-
-    # IMU attitude correction at min-angle stance.
-    active_suspension_pitch_kp: 8.0
-    active_suspension_pitch_ki: 0.35
-    active_suspension_pitch_kd: 0.28
-
-    active_suspension_roll_kp: 8.0
-    active_suspension_roll_ki: 0.35
-    active_suspension_roll_kd: 0.28
-
-    active_suspension_pitch_angle_diff_limit_deg: 45.0
-    active_suspension_roll_angle_diff_limit_deg: 45.0
-    active_suspension_pid_integral_limit_deg: 20.0
-
-    # Chassis-owned joint intent trajectory limits while attitude correction is active.
-    active_suspension_target_velocity_limit_deg: 80.0
-    active_suspension_target_acceleration_limit_deg: 360.0
-
-    # Automatic IMU mounting-error calibration.
-    # When all four requested joint targets stay equal for 2s, average pitch/roll from 2s to 5s.
-    chassis_imu_calibration_wait_s: 2.0
-    chassis_imu_calibration_sample_s: 3.0
+    target_physical_velocity_limit: 80.0
+    target_physical_acceleration_limit: 360.0
 
 gimbal_controller:
   ros__parameters:
@@ -176,11 +154,10 @@ deformable_chassis_controller:
 
 lf_joint_controller:
   ros__parameters:
-    # Joint-local servo inputs produced by chassis intent generation
-    measurement_angle: /chassis/left_front_joint/physical_angle
-    setpoint_angle: /chassis/left_front_joint/target_physical_angle
+    measurement: /chassis/left_front_joint/physical_angle
+    setpoint: /chassis/left_front_joint/target_physical_angle
+    eso_z3_output: /chassis/left_front_joint/eso_z3
     control: /chassis/left_front_joint/control_torque
-
     dt: 0.001
     b0: -1.0
     kt: 1.0
@@ -199,9 +176,9 @@ lf_joint_controller:
     output_max: 200.0
 lb_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
-    measurement_angle: /chassis/left_back_joint/physical_angle
-    setpoint_angle: /chassis/left_back_joint/target_physical_angle
+    measurement: /chassis/left_back_joint/physical_angle
+    setpoint: /chassis/left_back_joint/target_physical_angle
+    eso_z3_output: /chassis/left_back_joint/eso_z3
     control: /chassis/left_back_joint/control_torque
     dt: 0.001
     b0: -1.0
@@ -221,9 +198,9 @@ lb_joint_controller:
     output_max: 200.0
 rb_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
-    measurement_angle: /chassis/right_back_joint/physical_angle
-    setpoint_angle: /chassis/right_back_joint/target_physical_angle
+    measurement: /chassis/right_back_joint/physical_angle
+    setpoint: /chassis/right_back_joint/target_physical_angle
+    eso_z3_output: /chassis/right_back_joint/eso_z3
     control: /chassis/right_back_joint/control_torque
     dt: 0.001
     b0: -1.0
@@ -243,9 +220,9 @@ rb_joint_controller:
     output_max: 200.0
 rf_joint_controller:
   ros__parameters:
-    # Same joint-servo layout as lf_joint_controller
-    measurement_angle: /chassis/right_front_joint/physical_angle
-    setpoint_angle: /chassis/right_front_joint/target_physical_angle
+    measurement: /chassis/right_front_joint/physical_angle
+    setpoint: /chassis/right_front_joint/target_physical_angle
+    eso_z3_output: /chassis/right_front_joint/eso_z3
     control: /chassis/right_front_joint/control_torque
     dt: 0.001
     b0: -1.0
