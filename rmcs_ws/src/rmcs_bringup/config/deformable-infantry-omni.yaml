@@ -67,7 +67,7 @@ ground_inverse_calculation:
     L: 0.140
     h: 0.0182804
     output_prefix: /chassis/suspension/ground_inverse
-    use_attitude_topics: false
+    use_attitude_topics: true
     attitude_in_degrees: false
     yaw_topic: /chassis/imu/yaw
     pitch_topic: /chassis/imu/pitch
@@ -87,7 +87,7 @@ pose_forward_kinematics:
     # Plane input is taken explicitly from ground_inverse_calculation.
     l: 0.23276
     L: 0.140
-    h: 0.02431   #最大高度-0.2155
+    h: 0.0182804   #最大高度-0.2155
     a_topic: /chassis/suspension/ground_inverse/plane/a
     b_topic: /chassis/suspension/ground_inverse/plane/b
     c_topic: /chassis/suspension/ground_inverse/plane/c

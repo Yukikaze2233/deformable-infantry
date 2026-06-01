@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <string>
 
@@ -7,7 +8,14 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rmcs_executor/component.hpp>
 
+#include "contact_confidence/motion_model.hpp"
+#include "contact_confidence/reference_model.hpp"
+#include "contact_confidence/scoring.hpp"
+#include "contact_confidence/types.hpp"
+
 namespace rmcs_core::chassis::suspension {
+
+namespace cc = rmcs_core::chassis::suspension::contact_confidence;
 
 class GroundContactConfidenceEstimator
     : public rmcs_executor::Component
@@ -18,53 +26,90 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , joint_name_(get_parameter_or("joint_name", std::string("unknown_joint")))
-        , update_dt_(get_parameter_or("dt", 0.001))
-        , z3_weight_(get_parameter_or("z3_weight", 0.40))
-        , block_weight_(get_parameter_or("block_weight", 0.30))
-        , tracking_weight_(get_parameter_or("tracking_weight", 0.20))
-        , torque_weight_(get_parameter_or("torque_weight", 0.10))
-        , confidence_rise_rate_(get_parameter_or("confidence_rise_rate", 15.0))
-        , confidence_fall_rate_(get_parameter_or("confidence_fall_rate", 6.0))
-        , min_command_velocity_(get_parameter_or("min_command_velocity", 0.05))
-        , min_command_torque_(get_parameter_or("min_command_torque", 1.0))
-        , min_tracking_error_(get_parameter_or("min_tracking_error", 0.01))
-        , z3_activation_threshold_(get_parameter_or("z3_activation_threshold", 1.0))
-        , torque_activation_threshold_(get_parameter_or("torque_activation_threshold", 1.0)) {
+        , reference_config_(load_reference_config_())
+        , fusion_config_(load_fusion_config_())
+        , filter_(load_filter_config_())
+        , reference_learner_(reference_config_)
+        , score_calculator_(fusion_config_) {
         register_interfaces_();
     }
 
     void update() override {
-        InputSnapshot input;
+        cc::InputSnapshot input;
         if (!read_inputs_(input)) {
-            publish_nan_outputs_();
+            publish_invalid_outputs_();
             return;
         }
 
-        update_baselines_(input);
-        const FeatureScores scores = compute_scores_(input);
-        const double confidence_raw = fuse_scores_(scores);
-        const double confidence = filter_confidence_(confidence_raw);
+        const cc::MotionObservation observation = reference_learner_.motion_model().observe(input);
+        reference_learner_.update(input, observation);
 
+        if (!reference_learner_.z3_ready()) {
+            publish_warmup_outputs_();
+            return;
+        }
+
+        const cc::FeatureScores scores = score_calculator_.compute(input, observation, reference_learner_);
+        const double entry_confidence = score_calculator_.entry_confidence(scores);
+        const double hold_confidence = score_calculator_.hold_confidence(scores, reference_learner_);
+        const double confidence_raw = phase_logic_.compose(entry_confidence, hold_confidence);
+        const double confidence = filter_.update(confidence_raw);
         publish_outputs_(scores, confidence);
     }
 
 private:
-    struct InputSnapshot {
-        double measurement_angle = std::numeric_limits<double>::quiet_NaN();
-        double measurement_velocity = std::numeric_limits<double>::quiet_NaN();
-        double setpoint_angle = std::numeric_limits<double>::quiet_NaN();
-        double setpoint_velocity = std::numeric_limits<double>::quiet_NaN();
-        double control_torque = std::numeric_limits<double>::quiet_NaN();
-        double joint_torque = std::numeric_limits<double>::quiet_NaN();
-        double eso_z3 = std::numeric_limits<double>::quiet_NaN();
-    };
+    cc::ReferenceConfig load_reference_config_() {
+        cc::ReferenceConfig config;
+        config.min_command_torque = get_parameter_or("min_command_torque", 1.0);
+        config.min_tracking_error = get_parameter_or("min_tracking_error", 0.01);
+        config.min_progress_velocity = get_parameter_or(
+            "min_progress_velocity", get_parameter_or("min_command_velocity", 0.05));
+        config.min_free_motion_velocity = get_parameter_or("min_free_motion_velocity", 0.05);
+        config.free_state_tracking_error_threshold =
+            get_parameter_or("free_state_tracking_error_threshold", 0.005);
+        config.free_state_block_score_threshold =
+            get_parameter_or("free_state_block_score_threshold", 0.2);
+        config.free_state_raw_z3_delta_threshold =
+            get_parameter_or("free_state_raw_z3_delta_threshold", 0.5);
+        config.grounded_z3_reference = get_parameter_or("grounded_z3_reference", cc::kNaN);
+        config.grounded_z3_reject_margin = get_parameter_or("grounded_z3_reject_margin", 0.5);
+        config.min_free_samples_for_ready = static_cast<std::size_t>(
+            std::max<int64_t>(0, get_parameter_or("min_free_samples_for_ready", 200)));
+        config.min_free_motion_samples_for_torque_ready = static_cast<std::size_t>(
+            std::max<int64_t>(0, get_parameter_or("min_free_motion_samples_for_torque_ready", 100)));
+        config.free_state_reference_window_size = static_cast<std::size_t>(
+            std::max<int64_t>(1, get_parameter_or("free_state_reference_window_size", 400)));
+        config.free_state_z3_residual_quantile = get_parameter_or("free_state_z3_residual_quantile", 0.9);
+        config.min_z3_residual_scale = get_parameter_or("min_z3_residual_scale", 0.25);
+        return config;
+    }
 
-    struct FeatureScores {
-        double z3 = std::numeric_limits<double>::quiet_NaN();
-        double block = std::numeric_limits<double>::quiet_NaN();
-        double tracking = std::numeric_limits<double>::quiet_NaN();
-        double torque = std::numeric_limits<double>::quiet_NaN();
-    };
+    cc::FusionConfig load_fusion_config_() const {
+        cc::FusionConfig config;
+        config.z3_weight = get_parameter_or("z3_weight", 0.40);
+        config.block_weight = get_parameter_or("block_weight", 0.30);
+        config.tracking_weight = get_parameter_or("tracking_weight", 0.20);
+        config.torque_weight = get_parameter_or("torque_weight", 0.10);
+        config.entry_activate_threshold = get_parameter_or("entry_activate_threshold", 0.55);
+        config.hold_activate_threshold = get_parameter_or("hold_activate_threshold", 0.55);
+        config.hold_deactivate_threshold = get_parameter_or("hold_deactivate_threshold", 0.30);
+        config.normalized_z3_strength_full_scale_threshold =
+            get_parameter_or("normalized_z3_strength_full_scale_threshold", 3.0);
+        config.normalized_z3_strength_presence_threshold =
+            get_parameter_or("normalized_z3_strength_presence_threshold", 1.0);
+        config.normalized_z3_strength_presence_score =
+            get_parameter_or("normalized_z3_strength_presence_score", 0.7);
+        config.torque_activation_threshold = get_parameter_or("torque_activation_threshold", 1.0);
+        return config;
+    }
+
+    cc::FilterConfig load_filter_config_() const {
+        cc::FilterConfig config;
+        config.update_dt = get_parameter_or("dt", 0.001);
+        config.confidence_rise_rate = get_parameter_or("confidence_rise_rate", 15.0);
+        config.confidence_fall_rate = get_parameter_or("confidence_fall_rate", 6.0);
+        return config;
+    }
 
     void register_interfaces_() {
         register_input(
@@ -77,9 +122,8 @@ private:
             get_parameter_or("setpoint_angle", std::string("/chassis/joint/target_physical_angle")),
             setpoint_angle_);
         register_input(
-            get_parameter_or(
-                "setpoint_velocity", std::string("/chassis/joint/target_physical_velocity")),
-            setpoint_velocity_);
+            get_parameter_or("setpoint_velocity", std::string("/chassis/joint/target_physical_velocity")),
+            setpoint_velocity_, false);
         register_input(
             get_parameter_or("control_torque", std::string("/chassis/joint/control_torque")),
             control_torque_);
@@ -89,127 +133,47 @@ private:
 
         register_output(
             get_parameter_or(
-                "ground_contact_confidence",
-                std::string("/chassis/joint/ground_contact_confidence")),
-            ground_contact_confidence_, nan_);
+                "ground_contact_confidence", std::string("/chassis/joint/ground_contact_confidence")),
+            ground_contact_confidence_, cc::kNaN);
         register_output(
             get_parameter_or(
-                "ground_contact_z3_score",
-                std::string("/chassis/joint/ground_contact_z3_score")),
-            ground_contact_z3_score_, nan_);
+                "ground_contact_z3_score", std::string("/chassis/joint/ground_contact_z3_score")),
+            ground_contact_z3_score_, cc::kNaN);
         register_output(
             get_parameter_or(
-                "ground_contact_block_score",
-                std::string("/chassis/joint/ground_contact_block_score")),
-            ground_contact_block_score_, nan_);
+                "ground_contact_block_score", std::string("/chassis/joint/ground_contact_block_score")),
+            ground_contact_block_score_, cc::kNaN);
         register_output(
             get_parameter_or(
                 "ground_contact_tracking_score",
                 std::string("/chassis/joint/ground_contact_tracking_score")),
-            ground_contact_tracking_score_, nan_);
+            ground_contact_tracking_score_, cc::kNaN);
         register_output(
             get_parameter_or(
-                "ground_contact_torque_score",
-                std::string("/chassis/joint/ground_contact_torque_score")),
-            ground_contact_torque_score_, nan_);
+                "ground_contact_torque_score", std::string("/chassis/joint/ground_contact_torque_score")),
+            ground_contact_torque_score_, cc::kNaN);
     }
 
-    [[nodiscard]] bool read_inputs_(InputSnapshot& input) const {
+    [[nodiscard]] bool read_inputs_(cc::InputSnapshot& input) const {
         if (!measurement_angle_.ready() || !measurement_velocity_.ready() || !setpoint_angle_.ready()
-            || !setpoint_velocity_.ready() || !control_torque_.ready() || !joint_torque_.ready()
-            || !eso_z3_.ready()) {
+            || !control_torque_.ready() || !joint_torque_.ready() || !eso_z3_.ready()) {
             return false;
         }
 
         input.measurement_angle = *measurement_angle_;
         input.measurement_velocity = *measurement_velocity_;
         input.setpoint_angle = *setpoint_angle_;
-        input.setpoint_velocity = *setpoint_velocity_;
+        input.setpoint_velocity = setpoint_velocity_.ready() ? *setpoint_velocity_ : cc::kNaN;
         input.control_torque = *control_torque_;
         input.joint_torque = *joint_torque_;
         input.eso_z3 = *eso_z3_;
 
         return std::isfinite(input.measurement_angle) && std::isfinite(input.measurement_velocity)
-            && std::isfinite(input.setpoint_angle) && std::isfinite(input.setpoint_velocity)
-            && std::isfinite(input.control_torque) && std::isfinite(input.joint_torque)
-            && std::isfinite(input.eso_z3);
+            && std::isfinite(input.setpoint_angle) && std::isfinite(input.control_torque)
+            && std::isfinite(input.joint_torque) && std::isfinite(input.eso_z3);
     }
 
-    void update_baselines_(const InputSnapshot& input) {
-        if (!baselines_initialized_) {
-            z3_baseline_ = input.eso_z3;
-            torque_baseline_ = std::abs(input.joint_torque);
-            baselines_initialized_ = true;
-            return;
-        }
-
-        const double baseline_alpha = std::clamp(update_dt_ * 0.5, 0.0, 1.0);
-        z3_baseline_ = blend_(z3_baseline_, input.eso_z3, baseline_alpha);
-        torque_baseline_ = blend_(torque_baseline_, std::abs(input.joint_torque), baseline_alpha);
-    }
-
-    [[nodiscard]] FeatureScores compute_scores_(const InputSnapshot& input) const {
-        FeatureScores scores;
-
-        const double command_velocity = std::abs(input.setpoint_velocity);
-        const double command_torque = std::abs(input.control_torque);
-        const double measured_velocity = std::abs(input.measurement_velocity);
-        const double tracking_error = std::abs(input.setpoint_angle - input.measurement_angle);
-        const double z3_delta = std::abs(input.eso_z3 - z3_baseline_);
-        const double torque_delta = std::max(0.0, std::abs(input.joint_torque) - torque_baseline_);
-
-        const bool command_active =
-            command_velocity >= min_command_velocity_ || command_torque >= min_command_torque_
-            || tracking_error >= min_tracking_error_;
-
-        scores.z3 = normalized_activation_(z3_delta, z3_activation_threshold_);
-
-        if (command_active && command_velocity >= min_command_velocity_) {
-            const double blocked_ratio =
-                std::clamp(1.0 - measured_velocity / std::max(command_velocity, kMinDenominator), 0.0, 1.0);
-            scores.block = blocked_ratio;
-        } else {
-            scores.block = 0.0;
-        }
-
-        scores.tracking =
-            command_active ? normalized_activation_(tracking_error, min_tracking_error_) : 0.0;
-        scores.torque =
-            command_active ? normalized_activation_(torque_delta, torque_activation_threshold_) : 0.0;
-        return scores;
-    }
-
-    [[nodiscard]] double fuse_scores_(const FeatureScores& scores) const {
-        if (!std::isfinite(scores.z3) || !std::isfinite(scores.block)
-            || !std::isfinite(scores.tracking) || !std::isfinite(scores.torque)) {
-            return nan_;
-        }
-
-        const double raw = z3_weight_ * scores.z3 + block_weight_ * scores.block
-            + tracking_weight_ * scores.tracking + torque_weight_ * scores.torque;
-        return std::clamp(raw, 0.0, 1.0);
-    }
-
-    double filter_confidence_(double confidence_raw) {
-        if (!std::isfinite(confidence_raw)) {
-            filtered_confidence_ = nan_;
-            return filtered_confidence_;
-        }
-
-        if (!std::isfinite(filtered_confidence_)) {
-            filtered_confidence_ = confidence_raw;
-            return filtered_confidence_;
-        }
-
-        const double rate =
-            confidence_raw >= filtered_confidence_ ? confidence_rise_rate_ : confidence_fall_rate_;
-        const double alpha = std::clamp(rate * update_dt_, 0.0, 1.0);
-        filtered_confidence_ = blend_(filtered_confidence_, confidence_raw, alpha);
-        filtered_confidence_ = std::clamp(filtered_confidence_, 0.0, 1.0);
-        return filtered_confidence_;
-    }
-
-    void publish_outputs_(const FeatureScores& scores, double confidence) {
+    void publish_outputs_(const cc::FeatureScores& scores, double confidence) {
         *ground_contact_confidence_ = confidence;
         *ground_contact_z3_score_ = scores.z3;
         *ground_contact_block_score_ = scores.block;
@@ -217,43 +181,33 @@ private:
         *ground_contact_torque_score_ = scores.torque;
     }
 
-    void publish_nan_outputs_() {
-        baselines_initialized_ = false;
-        filtered_confidence_ = nan_;
-        *ground_contact_confidence_ = nan_;
-        *ground_contact_z3_score_ = nan_;
-        *ground_contact_block_score_ = nan_;
-        *ground_contact_tracking_score_ = nan_;
-        *ground_contact_torque_score_ = nan_;
+    void publish_invalid_outputs_() {
+        filter_.reset();
+        phase_logic_.reset();
+        *ground_contact_confidence_ = cc::kNaN;
+        *ground_contact_z3_score_ = cc::kNaN;
+        *ground_contact_block_score_ = cc::kNaN;
+        *ground_contact_tracking_score_ = cc::kNaN;
+        *ground_contact_torque_score_ = cc::kNaN;
     }
 
-    [[nodiscard]] static double normalized_activation_(double value, double threshold) {
-        if (!std::isfinite(value) || !std::isfinite(threshold) || threshold <= 0.0) {
-            return nan_;
-        }
-        return std::clamp(value / threshold, 0.0, 1.0);
+    void publish_warmup_outputs_() {
+        filter_.reset();
+        phase_logic_.reset();
+        *ground_contact_confidence_ = cc::kNaN;
+        *ground_contact_z3_score_ = cc::kNaN;
+        *ground_contact_block_score_ = cc::kNaN;
+        *ground_contact_tracking_score_ = cc::kNaN;
+        *ground_contact_torque_score_ = cc::kNaN;
     }
-
-    [[nodiscard]] static double blend_(double current, double target, double alpha) {
-        return current + alpha * (target - current);
-    }
-
-    static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
-    static constexpr double kMinDenominator = 1e-6;
 
     std::string joint_name_;
-    double update_dt_;
-    double z3_weight_;
-    double block_weight_;
-    double tracking_weight_;
-    double torque_weight_;
-    double confidence_rise_rate_;
-    double confidence_fall_rate_;
-    double min_command_velocity_;
-    double min_command_torque_;
-    double min_tracking_error_;
-    double z3_activation_threshold_;
-    double torque_activation_threshold_;
+    cc::ReferenceConfig reference_config_;
+    cc::FusionConfig fusion_config_;
+    cc::ConfidenceFilter filter_;
+    cc::ConfidencePhaseLogic phase_logic_{fusion_config_};
+    cc::ReferenceLearner reference_learner_;
+    cc::ScoreCalculator score_calculator_;
 
     InputInterface<double> measurement_angle_;
     InputInterface<double> measurement_velocity_;
@@ -268,11 +222,6 @@ private:
     OutputInterface<double> ground_contact_block_score_;
     OutputInterface<double> ground_contact_tracking_score_;
     OutputInterface<double> ground_contact_torque_score_;
-
-    bool baselines_initialized_ = false;
-    double z3_baseline_ = 0.0;
-    double torque_baseline_ = 0.0;
-    double filtered_confidence_ = nan_;
 };
 
 } // namespace rmcs_core::chassis::suspension

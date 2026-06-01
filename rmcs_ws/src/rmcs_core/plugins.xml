@@ -48,4 +48,5 @@
   <class type="rmcs_core::chassis::suspension::PoseForwardKinematics" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::chassis::suspension::GroundInverseCalculation" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::chassis::suspension::GroundContactConfidenceEstimator" base_class_type="rmcs_executor::Component" />
+  <class type="rmcs_core::chassis::suspension::LoadWeightAllocator" base_class_type="rmcs_executor::Component" />
 </library>
