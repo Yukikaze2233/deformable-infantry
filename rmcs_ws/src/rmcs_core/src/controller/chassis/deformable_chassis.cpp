@@ -30,8 +30,6 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , following_velocity_controller_(10.0, 0.0, 0.0)
-        , wireless_charging_offset_rad_(
-              deg_to_rad(get_parameter_or("wireless_charging_offset_deg", 135.0)))
         , joint_mode_mgr_(*this) {
 
         following_velocity_controller_.output_max = angular_velocity_max_;
@@ -211,13 +209,15 @@ private:
         } break;
 
         case rmcs_msgs::ChassisMode::WIRELESS_CHARGING: {
+            const double wireless_charging_offset_rad =
+                joint_mode_mgr_.wireless_charging_offset_rad();
             double chassis_angle_error =
                 calculate_unsigned_chassis_angle_error(chassis_control_angle);
 
             chassis_control_angle = normalize_positive_angle(
-                chassis_control_angle + wireless_charging_offset_rad_);
+                chassis_control_angle - wireless_charging_offset_rad);
             chassis_angle_error = normalize_positive_angle(
-                chassis_angle_error + wireless_charging_offset_rad_);
+                chassis_angle_error - wireless_charging_offset_rad);
             chassis_angle_error = normalize_signed_angle(chassis_angle_error);
 
             angular_velocity = following_velocity_controller_.update(chassis_angle_error);
@@ -301,7 +301,6 @@ private:
     std::array<OutputInterface<double>, kJointCount> joint_posture_target_angle_rad_;
 
     pid::PidCalculator following_velocity_controller_;
-    const double wireless_charging_offset_rad_;
 
     DeformableChassisModeManager joint_mode_mgr_;
 };

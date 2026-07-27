@@ -304,15 +304,7 @@ public:
 
             angular_velocity = following_velocity_controller_.update(err);
         } break;
-        case ChassisMode::WIRELESS_CHARGING: {
-            constexpr double offset = std::numbers::pi / 4;
-            double err = calculate_unsigned_chassis_angle_error(chassis_control_angle);
-
-            chassis_control_angle = chassis_control_angle + offset;
-            err = normalize_signed_angle(err + offset);
-
-            angular_velocity = following_velocity_controller_.update(err);
-        } break;
+        case ChassisMode::WIRELESS_CHARGING: [[fallthrough]];
         case ChassisMode::CLIMB: {
             chassis_control_angle = *chassis_climb_direction_;
 

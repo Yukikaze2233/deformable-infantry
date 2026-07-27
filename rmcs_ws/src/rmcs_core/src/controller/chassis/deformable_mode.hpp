@@ -40,7 +40,12 @@ public:
               std::clamp(
                   node.get_parameter_or("active_suspension_base_angle", max_angle_),
                   min_angle_ - 5.0, max_angle_))
-        , suspension_enable_(node.get_parameter_or("active_suspension_enable", false)) {
+        , suspension_enable_(node.get_parameter_or("active_suspension_enable", false))
+        , wireless_charging_offset_deg_(normalize_ccw_deg_(
+              node.get_parameter("wireless_charging_offset_deg").as_double()))
+        , wireless_charging_offset_rad_(deg_to_rad_(wireless_charging_offset_deg_))
+        , charging_raised_leg_index_(
+              select_charging_raised_leg_index_(wireless_charging_offset_deg_)) {
         current_target_angle_ = max_angle_;
         joint_current_target_angle_.fill(max_angle_);
         update_joint_posture_state_(false);
@@ -64,6 +69,8 @@ public:
         apply_symmetric_target_ = true;
         suspension_enabled_by_toggle_ = false;
         low_prone_enabled_by_toggle_ = false;
+        charging_posture_high_ = true;
+        before_wireless_charging_ = false;
 
         last_switch_right_ = rmcs_msgs::Switch::UNKNOWN;
         last_keyboard_ = rmcs_msgs::Keyboard::zero();
@@ -77,6 +84,7 @@ public:
         const rmcs_msgs::Keyboard& keyboard, double rotary_knob, double dt) {
 
         update_mode_from_inputs_(switch_left, switch_right, keyboard);
+        update_wireless_charging_posture_transition_();
         update_low_prone_toggle_from_inputs_(switch_left, switch_right);
 
         joint_posture_state_.ctrl_low_prone_active = keyboard.ctrl;
@@ -110,6 +118,8 @@ public:
     double min_angle() const { return min_angle_; }
     double max_angle() const { return max_angle_; }
     double max_angle_rad() const { return deg_to_rad_(max_angle_); }
+    double wireless_charging_offset_deg() const { return wireless_charging_offset_deg_; }
+    double wireless_charging_offset_rad() const { return wireless_charging_offset_rad_; }
 
     double active_suspension_min_angle_rad() const { return deg_to_rad_(min_angle_ - 5.0); }
 
@@ -125,7 +135,50 @@ private:
     static constexpr size_t kRightFront = 3;
     static constexpr size_t kJointCount = 4;
 
+    // Hardcoded wireless-charging postures: raised leg ~5cm higher (L=140mm).
+    static constexpr double kChargingHighSupportDeg = 59.0;
+    static constexpr double kChargingHighRaisedDeg = 35.0;
+    static constexpr double kChargingLowSupportDeg = 25.0;
+    static constexpr double kChargingLowRaisedDeg = 8.0;
+
+    // Leg azimuths in chassis frame (deg), counterclockwise from +X: LF → LB → RB → RF.
+    static constexpr std::array<double, kJointCount> kLegAzimuthDeg = {
+        45.0,
+        135.0,
+        225.0,
+        315.0,
+    };
+
     static double deg_to_rad_(double deg) { return deg * std::numbers::pi / 180.0; }
+
+    static double normalize_ccw_deg_(double deg) {
+        double normalized = std::fmod(deg, 360.0);
+        if (normalized < 0.0)
+            normalized += 360.0;
+        return normalized;
+    }
+
+    static double absolute_angle_distance_deg_(double a, double b) {
+        double delta = std::abs(normalize_ccw_deg_(a) - normalize_ccw_deg_(b));
+        if (delta > 180.0)
+            delta = 360.0 - delta;
+        return delta;
+    }
+
+    static size_t select_charging_raised_leg_index_(double wireless_charging_offset_deg) {
+        const double offset_ccw = normalize_ccw_deg_(wireless_charging_offset_deg);
+        size_t best_index = kLeftFront;
+        double best_distance = absolute_angle_distance_deg_(offset_ccw, kLegAzimuthDeg[kLeftFront]);
+        for (size_t i = 1; i < kJointCount; ++i) {
+            const double distance =
+                absolute_angle_distance_deg_(offset_ccw, kLegAzimuthDeg[i]);
+            if (distance < best_distance) {
+                best_distance = distance;
+                best_index = i;
+            }
+        }
+        return best_index;
+    }
 
     static bool
         symmetric_joint_target_requested_(const std::array<double, kJointCount>& joint_target_deg) {
@@ -133,6 +186,54 @@ private:
         return std::all_of(joint_target_deg.begin() + 1, joint_target_deg.end(), [&](double v) {
             return std::abs(v - joint_target_deg.front()) <= epsilon;
         });
+    }
+
+    double posture_reference_angle_deg_() const {
+        if (apply_symmetric_target_)
+            return current_target_angle_;
+
+        double sum = 0.0;
+        for (double angle_deg : joint_current_target_angle_)
+            sum += angle_deg;
+        return sum / static_cast<double>(kJointCount);
+    }
+
+    bool is_posture_high_() const {
+        const double midpoint = (min_angle_ + max_angle_) / 2.0;
+        return posture_reference_angle_deg_() >= midpoint;
+    }
+
+    void apply_wireless_charging_posture_(bool high) {
+        const double support_deg = high ? kChargingHighSupportDeg : kChargingLowSupportDeg;
+        const double raised_deg = high ? kChargingHighRaisedDeg : kChargingLowRaisedDeg;
+        const size_t diagonal_index = (charging_raised_leg_index_ + 2) % kJointCount;
+
+        current_target_angle_ = support_deg;
+        apply_symmetric_target_ = false;
+        joint_current_target_angle_.fill(support_deg);
+        joint_current_target_angle_[charging_raised_leg_index_] = raised_deg;
+        joint_current_target_angle_[diagonal_index] = raised_deg;
+        charging_posture_high_ = high;
+    }
+
+    void apply_symmetric_posture_from_high_(bool high) {
+        current_target_angle_ = high ? max_angle_ : min_angle_;
+        apply_symmetric_target_ = true;
+        joint_current_target_angle_.fill(current_target_angle_);
+    }
+
+    void update_wireless_charging_posture_transition_() {
+        const bool now_wireless_charging_ =
+            joint_posture_state_.mode == rmcs_msgs::ChassisMode::WIRELESS_CHARGING;
+
+        if (now_wireless_charging_ && !before_wireless_charging_) {
+            charging_posture_high_ = is_posture_high_();
+            apply_wireless_charging_posture_(charging_posture_high_);
+        } else if (!now_wireless_charging_ && before_wireless_charging_) {
+            apply_symmetric_posture_from_high_(charging_posture_high_);
+        }
+
+        before_wireless_charging_ = now_wireless_charging_;
     }
 
     void update_mode_from_inputs_(
@@ -241,12 +342,21 @@ private:
             remote_joint_posture_rotary_mode && rotary_knob_up_edge_(rotary_knob);
         const bool front_high_rear_low = !last_keyboard_.b && keyboard.b;
         const bool front_low_rear_high = !last_keyboard_.g && keyboard.g;
+        const bool posture_toggle_requested =
+            remote_posture_toggle_condition || keyboard_posture_toggle_condition;
+
+        if (joint_posture_state_.mode == rmcs_msgs::ChassisMode::WIRELESS_CHARGING) {
+            if (posture_toggle_requested)
+                apply_wireless_charging_posture_(!charging_posture_high_);
+            else
+                apply_wireless_charging_posture_(charging_posture_high_);
+
+            last_rotary_knob_ = rotary_knob;
+            return;
+        }
 
         if (apply_symmetric_target_)
             joint_current_target_angle_.fill(current_target_angle_);
-
-        const bool posture_toggle_requested =
-            remote_posture_toggle_condition || keyboard_posture_toggle_condition;
 
         if (posture_toggle_requested) {
             if (joint_posture_state_.suspension_active) {
@@ -320,12 +430,17 @@ private:
     double max_angle_;
     double active_suspension_base_angle_;
     bool suspension_enable_;
+    double wireless_charging_offset_deg_;
+    double wireless_charging_offset_rad_;
+    size_t charging_raised_leg_index_;
 
     double current_target_angle_;
     std::array<double, kJointCount> joint_current_target_angle_;
     bool apply_symmetric_target_ = true;
     bool suspension_enabled_by_toggle_ = false;
     bool low_prone_enabled_by_toggle_ = false;
+    bool charging_posture_high_ = true;
+    bool before_wireless_charging_ = false;
 
     rmcs_msgs::Switch last_switch_right_ = rmcs_msgs::Switch::UNKNOWN;
     rmcs_msgs::Keyboard last_keyboard_ = rmcs_msgs::Keyboard::zero();
