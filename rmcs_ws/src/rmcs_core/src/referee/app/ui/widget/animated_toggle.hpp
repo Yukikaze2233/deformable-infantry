@@ -10,7 +10,8 @@ class AnimatedToggle {
 public:
     using Clock = std::chrono::steady_clock;
 
-    explicit AnimatedToggle(std::chrono::duration<double> duration = std::chrono::duration<double>{0.5})
+    explicit AnimatedToggle(
+        std::chrono::duration<double> duration = std::chrono::duration<double>{0.5})
         : duration_(duration) {}
 
     void set_duration(std::chrono::duration<double> duration) {

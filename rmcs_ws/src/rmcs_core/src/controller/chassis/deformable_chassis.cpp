@@ -30,7 +30,8 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , following_velocity_controller_(10.0, 0.0, 0.0)
-        , spin_ratio_(std::clamp(get_parameter_or("spin_ratio", 0.6), 0.0, 1.0))
+        , wireless_charging_offset_rad_(
+              deg_to_rad(get_parameter_or("wireless_charging_offset_deg", 135.0)))
         , joint_mode_mgr_(*this) {
 
         following_velocity_controller_.output_max = angular_velocity_max_;
@@ -53,14 +54,18 @@ public:
         register_output("/chassis/pitch_lock_active", pitch_lock_active_, false);
         register_output("/chassis/active_suspension/active", active_suspension_active_, false);
         register_output("/chassis/deformable/low_prone_active", low_prone_active_, false);
-        register_output("/chassis/deformable/symmetric_posture_target", symmetric_posture_target_, true);
-        register_output("/chassis/deformable/correction_inverted", correction_inverted_, false);
-        register_output("/chassis/deformable/min_angle_deg", min_angle_deg_, joint_mode_mgr_.min_angle());
-        register_output("/chassis/deformable/max_angle_deg", max_angle_deg_, joint_mode_mgr_.max_angle());
         register_output(
-            "/chassis/deformable/suspension_reference_angle_deg",
-            suspension_reference_angle_deg_, joint_mode_mgr_.suspension_reference_angle_deg());
-        register_output("/chassis/deformable/reset_count", deformable_reset_count_, static_cast<size_t>(0));
+            "/chassis/deformable/symmetric_posture_target", symmetric_posture_target_, true);
+        register_output("/chassis/deformable/correction_inverted", correction_inverted_, false);
+        register_output(
+            "/chassis/deformable/min_angle_deg", min_angle_deg_, joint_mode_mgr_.min_angle());
+        register_output(
+            "/chassis/deformable/max_angle_deg", max_angle_deg_, joint_mode_mgr_.max_angle());
+        register_output(
+            "/chassis/deformable/suspension_reference_angle_deg", suspension_reference_angle_deg_,
+            joint_mode_mgr_.suspension_reference_angle_deg());
+        register_output(
+            "/chassis/deformable/reset_count", deformable_reset_count_, static_cast<size_t>(0));
         for (size_t i = 0; i < kJointCount; ++i) {
             register_output(
                 fmt::format("/chassis/deformable/{}_joint/posture_target_angle", kJointName[i]),
@@ -182,10 +187,10 @@ private:
         switch (*mode_) {
         case rmcs_msgs::ChassisMode::AUTO: break;
 
-        case rmcs_msgs::ChassisMode::SPIN: {
+        case rmcs_msgs::ChassisMode::SPIN_FAST: {
             bool forward = joint_mode_mgr_.spinning_forward();
             angular_velocity =
-                spin_ratio_ * (forward ? angular_velocity_max_ : -angular_velocity_max_);
+                forward ? angular_velocity_max_ : -angular_velocity_max_;
             angular_velocity =
                 std::clamp(angular_velocity, -angular_velocity_max_, angular_velocity_max_);
         } break;
@@ -201,6 +206,19 @@ private:
                     chassis_control_angle += 2 * std::numbers::pi;
                 chassis_angle_error -= alignment;
             }
+
+            angular_velocity = following_velocity_controller_.update(chassis_angle_error);
+        } break;
+
+        case rmcs_msgs::ChassisMode::WIRELESS_CHARGING: {
+            double chassis_angle_error =
+                calculate_unsigned_chassis_angle_error(chassis_control_angle);
+
+            chassis_control_angle = normalize_positive_angle(
+                chassis_control_angle + wireless_charging_offset_rad_);
+            chassis_angle_error = normalize_positive_angle(
+                chassis_angle_error + wireless_charging_offset_rad_);
+            chassis_angle_error = normalize_signed_angle(chassis_angle_error);
 
             angular_velocity = following_velocity_controller_.update(chassis_angle_error);
         } break;
@@ -227,6 +245,22 @@ private:
     }
 
     static double deg_to_rad(double deg) { return deg * std::numbers::pi / 180.0; }
+
+    static double normalize_positive_angle(double angle) {
+        constexpr double full_turn = 2 * std::numbers::pi;
+        while (angle >= full_turn)
+            angle -= full_turn;
+        while (angle < 0.0)
+            angle += full_turn;
+        return angle;
+    }
+
+    static double normalize_signed_angle(double angle) {
+        angle = normalize_positive_angle(angle);
+        if (angle > std::numbers::pi)
+            angle -= 2 * std::numbers::pi;
+        return angle;
+    }
 
     void publish_joint_posture_targets_() {
         std::array<double, kJointCount> targets_deg{};
@@ -267,7 +301,7 @@ private:
     std::array<OutputInterface<double>, kJointCount> joint_posture_target_angle_rad_;
 
     pid::PidCalculator following_velocity_controller_;
-    const double spin_ratio_;
+    const double wireless_charging_offset_rad_;
 
     DeformableChassisModeManager joint_mode_mgr_;
 };

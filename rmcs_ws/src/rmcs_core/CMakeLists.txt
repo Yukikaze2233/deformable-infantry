@@ -17,10 +17,10 @@ ament_auto_find_build_dependencies()
 include(FetchContent)
 set(BUILD_STATIC_LIBRMCS ON CACHE BOOL "Build static librmcs SDK" FORCE)
 FetchContent_Declare(
-  librmcs
-  URL https://github.com/Alliance-Algorithm/librmcs/releases/download/v3.2.0rc0/librmcs-sdk-src-3.2.0-rc.0.zip
-  URL_HASH SHA256=accefeb3a46d7da32a215765d0907de36c25353dd7951e342aaddfe98d2971e5
-  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    librmcs
+    URL https://github.com/Alliance-Algorithm/librmcs/releases/download/v3.3.0b1/librmcs-sdk-src-3.3.0-beta.1-debug.zip
+    URL_HASH SHA256=446d632b23b652dd309f35075ef90928dee89f42e8ec71417fa2439445e0b4ff
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(librmcs)
 

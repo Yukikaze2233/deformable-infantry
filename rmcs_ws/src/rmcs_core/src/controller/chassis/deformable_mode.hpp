@@ -82,8 +82,7 @@ public:
         joint_posture_state_.ctrl_low_prone_active = keyboard.ctrl;
         joint_posture_state_.low_prone_active =
             joint_posture_state_.ctrl_low_prone_active || low_prone_enabled_by_toggle_;
-        joint_posture_state_.pitch_lock_active =
-            joint_posture_state_.ctrl_low_prone_active;
+        joint_posture_state_.pitch_lock_active = joint_posture_state_.ctrl_low_prone_active;
 
         update_suspension_mode_from_inputs_(switch_left, switch_right, keyboard, rotary_knob);
         update_posture_target_from_inputs_(switch_left, switch_right, keyboard, rotary_knob, dt);
@@ -148,23 +147,27 @@ private:
 
         if (last_switch_right_ == rmcs_msgs::Switch::MIDDLE
             && switch_right == rmcs_msgs::Switch::DOWN) {
-            if (next_mode == rmcs_msgs::ChassisMode::SPIN) {
+            if (next_mode == rmcs_msgs::ChassisMode::SPIN_FAST) {
                 next_mode = rmcs_msgs::ChassisMode::STEP_DOWN;
             } else {
-                next_mode = rmcs_msgs::ChassisMode::SPIN;
+                next_mode = rmcs_msgs::ChassisMode::SPIN_FAST;
                 joint_posture_state_.spinning_forward = !joint_posture_state_.spinning_forward;
             }
         } else if (!last_keyboard_.c && keyboard.c) {
-            if (next_mode == rmcs_msgs::ChassisMode::SPIN) {
+            if (next_mode == rmcs_msgs::ChassisMode::SPIN_FAST) {
                 next_mode = rmcs_msgs::ChassisMode::AUTO;
             } else {
-                next_mode = rmcs_msgs::ChassisMode::SPIN;
+                next_mode = rmcs_msgs::ChassisMode::SPIN_FAST;
                 joint_posture_state_.spinning_forward = !joint_posture_state_.spinning_forward;
             }
         } else if (!last_keyboard_.z && keyboard.z) {
             next_mode = next_mode == rmcs_msgs::ChassisMode::STEP_DOWN
                           ? rmcs_msgs::ChassisMode::AUTO
                           : rmcs_msgs::ChassisMode::STEP_DOWN;
+        } else if (!last_keyboard_.x && keyboard.x) {
+            next_mode = next_mode == rmcs_msgs::ChassisMode::WIRELESS_CHARGING
+                          ? rmcs_msgs::ChassisMode::AUTO
+                          : rmcs_msgs::ChassisMode::WIRELESS_CHARGING;
         }
 
         joint_posture_state_.mode = next_mode;
@@ -248,9 +251,8 @@ private:
         if (posture_toggle_requested) {
             if (joint_posture_state_.suspension_active) {
                 active_suspension_base_angle_ =
-                    (std::abs(active_suspension_base_angle_ - max_angle_) < 1e-6)
-                      ? min_angle_
-                      : max_angle_;
+                    (std::abs(active_suspension_base_angle_ - max_angle_) < 1e-6) ? min_angle_
+                                                                                  : max_angle_;
                 current_target_angle_ = active_suspension_base_angle_;
                 apply_symmetric_target_ = true;
                 joint_current_target_angle_.fill(current_target_angle_);

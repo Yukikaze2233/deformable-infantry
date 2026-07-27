@@ -21,7 +21,8 @@ public:
             std::swap(min_angle_rad_, max_angle_rad_);
     }
 
-    void update(double chassis_angle, const std::array<double, 4>& leg_angles, bool active_suspension) {
+    void update(
+        double chassis_angle, const std::array<double, 4>& leg_angles, bool active_suspension) {
         if (!valid_angle_range_()) {
             set_visible(false);
             return;
@@ -111,8 +112,8 @@ private:
     }
 
     void update_leg_(
-        Arc& leg, double body_angle, uint16_t near_radius, uint16_t far_radius,
-        double leg_angle, bool active_suspension) const {
+        Arc& leg, double body_angle, uint16_t near_radius, uint16_t far_radius, double leg_angle,
+        bool active_suspension) const {
         const double normalized_extension = normalized_leg_extension_(leg_angle);
         // Min angle looks like a thin leg stretching radially outward from the center ring.
         const uint16_t radius = static_cast<uint16_t>(

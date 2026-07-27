@@ -321,13 +321,11 @@ private:
         return visible_angle * std::clamp(value - min, 0.0, max - min) / (max - min);
     }
 
-    static constexpr double calculate_energy_angle(
-        double value, double cutoff_voltage, double full_voltage) {
+    static constexpr double
+        calculate_energy_angle(double value, double cutoff_voltage, double full_voltage) {
         const double clamped_value = std::clamp(value, cutoff_voltage, full_voltage);
-        const double numerator =
-            clamped_value * clamped_value - cutoff_voltage * cutoff_voltage;
-        const double denominator =
-            full_voltage * full_voltage - cutoff_voltage * cutoff_voltage;
+        const double numerator = clamped_value * clamped_value - cutoff_voltage * cutoff_voltage;
+        const double denominator = full_voltage * full_voltage - cutoff_voltage * cutoff_voltage;
         return visible_angle * numerator / denominator;
     }
 

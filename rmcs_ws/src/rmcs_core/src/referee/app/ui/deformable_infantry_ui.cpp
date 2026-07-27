@@ -3,10 +3,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <numbers>
 
-#include <eigen3/Eigen/Core>
 #include <fmt/format.h>
 #include <rclcpp/node.hpp>
 #include <rmcs_executor/component.hpp>
@@ -82,7 +80,6 @@ public:
 
         register_input("/remote/mouse", mouse_);
         register_input("/remote/keyboard", keyboard_);
-        register_input("/auto_aim/robot_center", auto_aim_robot_center_, false);
 
         register_input("/referee/game/stage", game_stage_);
 
@@ -97,7 +94,6 @@ public:
         update_chassis_direction_indicator();
         update_deformable_chassis_leg_arcs();
         update_ctrl_ui();
-        update_auto_aim_feedback();
 
         status_ring_.update_bullet_allowance(*robot_bullet_allowance_);
         const double friction_wheel_speed =
@@ -122,7 +118,7 @@ public:
 private:
     void update_ctrl_ui() {
         const bool ctrl_active = keyboard_.ready() && keyboard_->ctrl;
-        const double reveal    = ctrl_transition_.update(*timestamp_, ctrl_active);
+        const double reveal = ctrl_transition_.update(*timestamp_, ctrl_active);
 
         crosshair_circle_.set_x(
             static_cast<uint16_t>(
@@ -137,25 +133,6 @@ private:
             return;
     }
 
-    void update_auto_aim_feedback() {
-        if (!auto_aim_robot_center_.ready() || !auto_aim_robot_center_->allFinite()) {
-            target_distance_indicator_.set_visible(false);
-            return;
-        }
-
-        const double distance = auto_aim_robot_center_->norm();
-        if (!std::isfinite(distance)) {
-            target_distance_indicator_.set_visible(false);
-            return;
-        }
-
-        target_distance_text_index_ ^= 1u;
-        auto& text = target_distance_text_[target_distance_text_index_];
-        std::snprintf(text.data(), text.size(), "%.1fm", distance);
-        target_distance_indicator_.set_value(text.data());
-        target_distance_indicator_.set_visible(true);
-    }
-
     void update_chassis_direction_indicator() {
         auto chassis_mode = *chassis_mode_;
 
@@ -165,7 +142,7 @@ private:
 
     static Shape::Color chassis_direction_indicator_color(rmcs_msgs::ChassisMode mode) {
         switch (mode) {
-        case rmcs_msgs::ChassisMode::SPIN: return Shape::Color::GREEN;
+        case rmcs_msgs::ChassisMode::SPIN_FAST: return Shape::Color::GREEN;
         case rmcs_msgs::ChassisMode::AUTO: return Shape::Color::CYAN;
         case rmcs_msgs::ChassisMode::STEP_DOWN: return Shape::Color::PINK;
         default: return Shape::Color::WHITE;
@@ -195,9 +172,9 @@ private:
 
     static constexpr uint16_t screen_width = 1920, screen_height = 1080;
     static constexpr uint16_t x_center = screen_width / 2, y_center = screen_height / 2;
-    static constexpr double friction_wheel_speed_indicator_radius_      = 430.0;
+    static constexpr double friction_wheel_speed_indicator_radius_ = 430.0;
     static constexpr uint16_t friction_wheel_speed_indicator_font_size_ = 20;
-    static constexpr double supercap_cutoff_voltage                     = 8.0;
+    static constexpr double supercap_cutoff_voltage = 8.0;
 
     static uint16_t friction_wheel_speed_indicator_center_x() {
         return static_cast<uint16_t>(std::lround(
@@ -222,7 +199,7 @@ private:
 
     InputInterface<double> chassis_voltage_;
 
-    static constexpr size_t kJointCount       = 4;
+    static constexpr size_t kJointCount = 4;
     static constexpr const char* kJointName[] = {
         "left_front",
         "left_back",
@@ -241,7 +218,6 @@ private:
 
     InputInterface<rmcs_msgs::Mouse> mouse_;
     InputInterface<rmcs_msgs::Keyboard> keyboard_;
-    InputInterface<Eigen::Vector3d> auto_aim_robot_center_;
 
     InputInterface<rmcs_msgs::GameStage> game_stage_;
 
@@ -254,10 +230,6 @@ private:
 
     Arc chassis_direction_indicator_;
     DeformableChassisLegArcs deformable_chassis_leg_arcs_;
-    Text target_distance_indicator_{
-        Shape::Color::GREEN, 20, 2, x_center + 34, y_center + 24, "", false};
-    std::array<std::array<char, 16>, 2> target_distance_text_{};
-    size_t target_distance_text_index_ = 0;
 
     AnimatedToggle ctrl_transition_{};
     uint16_t crosshair_base_x_ = 0;

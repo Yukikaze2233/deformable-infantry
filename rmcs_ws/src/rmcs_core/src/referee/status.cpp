@@ -1,4 +1,3 @@
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <eigen3/Eigen/Eigen>
@@ -16,8 +15,6 @@
 
 namespace rmcs_core::referee {
 using namespace status;
-
-using Clock = std::chrono::steady_clock;
 
 class Status
     : public rmcs_executor::Component
@@ -47,7 +44,6 @@ public:
         register_output("/referee/id", robot_id_, rmcs_msgs::RobotId::UNKNOWN);
         register_output("/referee/shooter/cooling", robot_shooter_cooling_, 0);
         register_output("/referee/shooter/heat_limit", robot_shooter_heat_limit_, 0);
-        register_output("/referee/shooter/heat", robot_shooter_heat_, 0);
         register_output("/referee/chassis/power_limit", robot_chassis_power_limit_, 0.0);
         register_output("/referee/chassis/power", robot_chassis_power_, 0.0);
         register_output("/referee/chassis/buffer_energy", robot_buffer_energy_, 60.0);
@@ -101,10 +97,8 @@ public:
     }
 
     void update() override {
-        if (!serial_.active()) {
-            update_chassis_output_status_timeout();
+        if (!serial_.active())
             return;
-        }
 
         if (cache_size_ >= sizeof(frame_.header)) {
             auto frame_size = sizeof(frame_.header) + sizeof(frame_.body.command_id)
@@ -148,17 +142,9 @@ public:
             *robot_chassis_power_ = 0.0;
             *robot_buffer_energy_ = 60.0;
         }
-
-        update_chassis_output_status_timeout();
     }
 
 private:
-    void update_chassis_output_status_timeout() {
-        if (Clock::now() - last_robot_status_update_time_ > chassis_output_status_timeout_) {
-            *chassis_output_status_ = true;
-        }
-    }
-
     void process_frame() {
         auto command_id = frame_.body.command_id;
         if (command_id == 0x0001)
@@ -225,8 +211,6 @@ private:
     }
 
     void update_robot_status() {
-        last_robot_status_update_time_ = Clock::now();
-
         if (*game_stage_ == rmcs_msgs::GameStage::STARTED)
             robot_status_watchdog_.reset(60'000);
         else
@@ -252,7 +236,6 @@ private:
 
         auto& data = reinterpret_cast<PowerHeatData&>(frame_.body.data);
         *robot_buffer_energy_ = static_cast<double>(data.buffer_energy);
-        *robot_shooter_heat_ = static_cast<int64_t>(data.shooter_17mm_barrel_heat);
     }
 
     void update_robot_position() {
@@ -324,7 +307,6 @@ private:
     static constexpr int64_t safe_shooter_heat_limit = 50'000;
     // Chassis: Health priority with level 1
     static constexpr double safe_chassis_power_limit = 45;
-    static constexpr auto chassis_output_status_timeout_ = std::chrono::milliseconds{500};
 
     rclcpp::Logger logger_;
 
@@ -346,7 +328,6 @@ private:
     OutputInterface<int64_t> robot_shooter_cooling_, robot_shooter_heat_limit_;
     OutputInterface<double> robot_chassis_power_limit_;
     OutputInterface<bool> chassis_output_status_;
-    Clock::time_point last_robot_status_update_time_ = Clock::now();
 
     rmcs_utility::TickTimer power_heat_data_watchdog_;
     OutputInterface<double> robot_chassis_power_;
@@ -375,7 +356,6 @@ private:
     OutputInterface<double> map_command_target_position_y_;
     OutputInterface<uint8_t> map_command_keyboard_;
     OutputInterface<uint8_t> map_command_target_robot_id_;
-    OutputInterface<int64_t> robot_shooter_heat_;
     OutputInterface<uint16_t> map_command_source_;
     OutputInterface<double> map_command_received_timestamp_;
     OutputInterface<double> map_command_event_target_position_x_;
