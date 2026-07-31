@@ -6,6 +6,8 @@
   <class type="rmcs_core::hardware::DeformableInfantryOmniB" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::hardware::DeformableInfantryOmniC" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::hardware::Sentry" base_class_type="rmcs_executor::Component" />
+  
+  <class type="rmcs_core::hardware::Px4VisionBridge" base_class_type="rmcs_executor::Component" />
 
   <class type="rmcs_core::controller::chassis::ChassisController" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::controller::chassis::ChassisPowerController" base_class_type="rmcs_executor::Component" />
@@ -53,6 +55,7 @@
   <class type="rmcs_core::referee::Command" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::referee::command::Interaction" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::referee::command::interaction::Ui" base_class_type="rmcs_executor::Component" />
+  <class type="rmcs_core::referee::command::interaction::SentryDecision" base_class_type="rmcs_executor::Component" />
 
   <class type="rmcs_core::referee::app::ui::Infantry" base_class_type="rmcs_executor::Component" />
   <class type="rmcs_core::referee::app::ui::DeformableInfantry" base_class_type="rmcs_executor::Component" />

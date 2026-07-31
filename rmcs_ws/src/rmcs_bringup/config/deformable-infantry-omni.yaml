@@ -60,7 +60,7 @@ auto_aim_capturer:
   ros__parameters:
     camera_name: ""
     exposure_us: 4000.0
-    gain: 8.0
+    gain: 10.0
     framerate: 120.0
     invert_image: false
     rls_tau_sec: 10.0
@@ -93,12 +93,6 @@ auto_aim_ui:
     offset_x: 0.0
     offset_y: -0.08
     offset_z: 0.0
-    warn_distance_m: 2.0
-
-referee_ui_infantry:
-  ros__parameters:
-    crosshair_offset_x: -2
-    crosshair_offset_y: -30
 
 deformable_infantry:
   ros__parameters:

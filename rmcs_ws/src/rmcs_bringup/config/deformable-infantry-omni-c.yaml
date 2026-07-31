@@ -10,7 +10,6 @@ rmcs_executor:
       - rmcs_core::referee::command::Interaction -> referee_interaction
       - rmcs_core::referee::command::interaction::Ui -> referee_ui
       - rmcs_core::referee::app::ui::DeformableInfantry -> referee_ui_infantry
-      # - rmcs_core::referee::app::ui::AutoAimUi -> auto_aim_ui
 
       - rmcs_core::controller::gimbal::DeformableInfantryGimbalController -> gimbal_controller
 
@@ -31,9 +30,9 @@ rmcs_executor:
       - rmcs_core::controller::chassis::DeformableJointController -> rb_joint_controller
       - rmcs_core::controller::chassis::DeformableJointController -> rf_joint_controller
 
-      # - rmcs::AutoAimComponent -> auto_aim_component
-      # - rmcs::AutoAimCapturerComponent -> auto_aim_capturer
-      # - rmcs_core::referee::app::ui::AutoAimUi -> auto_aim_ui
+      - rmcs::AutoAimComponent -> auto_aim_component
+      - rmcs::AutoAimCapturerComponent -> auto_aim_capturer
+      - rmcs_core::referee::app::ui::AutoAimUi -> auto_aim_ui
 
       # - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
       # - rmcs_core::debug::ValueCollector -> value_collector
@@ -61,7 +60,7 @@ auto_aim_capturer:
   ros__parameters:
     camera_name: ""
     exposure_us: 4000.0
-    gain: 8.0
+    gain: 10.0
     framerate: 120.0
     invert_image: false
     rls_tau_sec: 10.0
@@ -79,12 +78,11 @@ auto_aim_component:
     fire_control:
       bullet_speed: 22.5
       shoot_delay: 0.04
-      offset_yaw: +2.5
-      offset_pitch: +0.5
+      offset_yaw: +1.0
+      offset_pitch: -0.5
       attack_window: 80.0
       degraded_angle_speed: 12.0
       window_hysteresis: 0.2
-      is_lazy_gimbal: false
       attack_preaim: false
       require_stable_command: false
       yaw_tolerance: 0.07
@@ -93,14 +91,8 @@ auto_aim_component:
 auto_aim_ui:
   ros__parameters:
     offset_x: 0.0
-    offset_y: +0.08
+    offset_y: -0.08
     offset_z: 0.0
-    warn_distance_m: 2.0
-
-referee_ui_infantry:
-  ros__parameters:
-    crosshair_offset_x: -2
-    crosshair_offset_y: -30
 
 deformable_infantry:
   ros__parameters:
