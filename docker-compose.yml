@@ -1,6 +1,6 @@
 services:
   rmcs-develop:
-    image: qzhhhi/rmcs-develop:latest-full
+    image: qzhhhi/rmcs-develop:latest
     user: "1000:1000"
     privileged: true
     volumes:

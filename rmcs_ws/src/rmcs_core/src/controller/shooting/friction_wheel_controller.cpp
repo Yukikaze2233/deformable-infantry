@@ -31,6 +31,7 @@ public:
         register_input("/remote/switch/right", switch_right_);
         register_input("/remote/switch/left", switch_left_);
         register_input("/remote/keyboard", keyboard_);
+        register_input("/remote/rotary_knob", rotary_knob_, false);
 
         auto friction_wheels = get_parameter("friction_wheels").as_string_array();
         auto friction_working_velocities = get_parameter("friction_velocities").as_double_array();
@@ -48,6 +49,16 @@ public:
         friction_working_velocity_outputs_ =
             std::make_unique<OutputInterface<double>[]>(friction_count_);
         friction_control_velocities_ = std::make_unique<OutputInterface<double>[]>(friction_count_);
+        if (has_parameter("friction_velocities_low_mode")) {
+            auto friction_working_velocities_low =
+                get_parameter("friction_velocities_low_mode").as_double_array();
+            if (friction_working_velocities_low.size() == friction_count_) {
+                friction_working_velocities_low_ = std::make_unique<double[]>(friction_count_);
+                for (size_t i = 0; i < friction_count_; i++)
+                    friction_working_velocities_low_[i] = friction_working_velocities_low[i];
+                low_mode_enabled_ = true;
+            }
+        }
         for (size_t i = 0; i < friction_count_; i++) {
             friction_working_velocities_[i] = friction_working_velocities[i];
             register_input(friction_wheels[i] + "/velocity", friction_velocities_[i]);
@@ -72,6 +83,13 @@ public:
         const auto keyboard = *keyboard_;
 
         using namespace rmcs_msgs;
+        const bool knob_up = rotary_knob_.ready() && *rotary_knob_ <= -knob_edge_threshold_;
+        if (low_mode_enabled_ && switch_left == Switch::DOWN && switch_right == Switch::MIDDLE
+            && knob_up && !last_knob_up_)
+            toggle_low_mode();
+
+        last_knob_up_ = knob_up;
+
         if ((switch_left == Switch::UNKNOWN || switch_right == Switch::UNKNOWN)
             || (switch_left == Switch::DOWN && switch_right == Switch::DOWN)) {
             reset_all_controls();
@@ -102,6 +120,7 @@ public:
 private:
     void reset_all_controls() {
         friction_enabled_ = false;
+        low_mode_active_ = false;
 
         last_primary_friction_velocity_ = nan_;
         primary_friction_velocity_decrease_integral_ = 0;
@@ -114,9 +133,26 @@ private:
         *friction_ready_ = *friction_jammed_ = *bullet_fired_ = false;
     }
 
+    void toggle_low_mode() {
+        low_mode_active_ = !low_mode_active_;
+
+        if (!std::isnan(friction_soft_start_stop_percentage_)) {
+            double sum = 0.0;
+            for (size_t i = 0; i < friction_count_; i++)
+                sum += *friction_velocities_[i] / target_friction_velocity(i);
+            friction_soft_start_stop_percentage_ =
+                std::clamp(sum / static_cast<double>(friction_count_), 0.0, 1.0);
+        }
+    }
+
+    double target_friction_velocity(size_t i) const {
+        return low_mode_active_ ? friction_working_velocities_low_[i]
+                                : friction_working_velocities_[i];
+    }
+
     void update_friction_working_velocity_outputs() {
         for (size_t i = 0; i < friction_count_; i++)
-            *friction_working_velocity_outputs_[i] = friction_working_velocities_[i];
+            *friction_working_velocity_outputs_[i] = target_friction_velocity(i);
     }
 
     void update_friction_velocities() {
@@ -124,7 +160,7 @@ private:
             friction_soft_start_stop_percentage_ = 0.0;
             for (size_t i = 0; i < friction_count_; i++)
                 friction_soft_start_stop_percentage_ +=
-                    *friction_velocities_[i] / friction_working_velocities_[i];
+                    *friction_velocities_[i] / target_friction_velocity(i);
             friction_soft_start_stop_percentage_ /= static_cast<double>(friction_count_);
         }
         friction_soft_start_stop_percentage_ +=
@@ -134,7 +170,7 @@ private:
 
         for (size_t i = 0; i < friction_count_; i++)
             *friction_control_velocities_[i] =
-                friction_soft_start_stop_percentage_ * friction_working_velocities_[i];
+                friction_soft_start_stop_percentage_ * target_friction_velocity(i);
     }
 
     void update_friction_status() {
@@ -181,7 +217,7 @@ private:
                 primary_friction_velocity_decrease_integral_ += differential;
             else {
                 if (primary_friction_velocity_decrease_integral_ < -14.0
-                    && last_primary_friction_velocity_ < friction_working_velocities_[0] - 20.0)
+                    && last_primary_friction_velocity_ < target_friction_velocity(0) - 20.0)
                     fired = true;
 
                 primary_friction_velocity_decrease_integral_ = 0;
@@ -193,20 +229,26 @@ private:
     }
 
     static constexpr double nan_ = std::numeric_limits<double>::quiet_NaN();
+    static constexpr double knob_edge_threshold_ = 0.7;
 
     rclcpp::Logger logger_;
 
     InputInterface<rmcs_msgs::Switch> switch_right_;
     InputInterface<rmcs_msgs::Switch> switch_left_;
     InputInterface<rmcs_msgs::Keyboard> keyboard_;
+    InputInterface<double> rotary_knob_;
 
     rmcs_msgs::Switch last_switch_right_ = rmcs_msgs::Switch::UNKNOWN;
     rmcs_msgs::Switch last_switch_left_ = rmcs_msgs::Switch::UNKNOWN;
     rmcs_msgs::Keyboard last_keyboard_ = rmcs_msgs::Keyboard::zero();
+    bool last_knob_up_ = false;
 
     size_t friction_count_;
 
     std::unique_ptr<double[]> friction_working_velocities_;
+    std::unique_ptr<double[]> friction_working_velocities_low_;
+    bool low_mode_enabled_ = false;
+    bool low_mode_active_ = false;
 
     std::unique_ptr<InputInterface<double>[]> friction_velocities_;
     std::unique_ptr<OutputInterface<double>[]> friction_working_velocity_outputs_;

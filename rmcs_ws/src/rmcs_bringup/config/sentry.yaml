@@ -22,7 +22,7 @@ rmcs_executor:
       - rmcs_core::controller::chassis::ChassisPowerController -> chassis_power_controller
       - rmcs_core::controller::chassis::SteeringWheelController -> steering_wheel_controller
 
-      - rmcs::navigation::Navigation -> rmcs_navigation
+      # - rmcs::navigation::Navigation -> rmcs_navigation
 
       - rmcs::AutoAimRecorderComponent -> auto_aim_recorder
       - rmcs::AutoAimCapturerComponent -> auto_aim_capturer
@@ -34,13 +34,13 @@ rmcs_executor:
 rmcs_navigation:
   ros__parameters:
     command_vel_name: "/cmd_vel"
-    endpoint: "train"
+    endpoint: "rmuc"
     enable_goal_topic_forward: true
 
 auto_aim_capturer:
   ros__parameters:
     camera_name: ""
-    exposure_us: 3000.0
+    exposure_us: 1500.0
     gain: 8.0
     framerate: 120.0
     invert_image: true
@@ -61,19 +61,24 @@ auto_aim_component:
   ros__parameters:
     manual_shoot: true
     enable_rune: true
+    # track_ids: [OUTPOST, BASE]
+    track_ids: [HERO, ENGINEER, INFANTRY_3, INFANTRY_4, SENTRY, OUTPOST, BASE]
     camera_translation: [0.07128, 0.0, 0.0481]
     fire_control:
       bullet_speed: 22.5
-      shoot_delay: 0.02
+      shoot_delay: 0.05
       offset_yaw: -0.3
-      offset_pitch: +0.9
+      offset_pitch: -0.1
       attack_window: 80.0
-      degraded_angle_speed: 10.0
+      degraded_angle_speed: 12.0
+      window_redundancy: 0.8
       window_hysteresis: 0.2
       attack_preaim: false
       require_stable_command: false
       yaw_tolerance: 0.07
       pitch_tolerance: 0.04
+      rune_idle_duration: 0.4
+      rune_shoot_duration: 0.2
 
 value_broadcaster:
   ros__parameters:
@@ -101,26 +106,46 @@ gimbal_controller:
     upper_limit: -0.65
     lower_limit: 0.36
 
-    top_yaw_angle_kp: 35.0
+    top_yaw_angle_kp: 30.0
     top_yaw_angle_ki: 0.008
     top_yaw_angle_kd: 0.005
     top_yaw_velocity_kp: 2.160
-    top_yaw_velocity_ki: 0.00
+    top_yaw_velocity_ki: 0.0
     top_yaw_velocity_kd: 0.0
 
-    bottom_yaw_angle_kp: 16.0
+    bottom_yaw_angle_kp: 15.0
     bottom_yaw_angle_ki: 0.01
     bottom_yaw_angle_kd: 0.0
     bottom_yaw_velocity_kp: 2.75
     bottom_yaw_velocity_ki: 0.00125
     bottom_yaw_velocity_kd: 0.0
 
-    pitch_angle_kp: 32.0
+    pitch_angle_kp: 35.0
     pitch_angle_ki: 0.01
     pitch_angle_kd: 0.0
     pitch_velocity_kp: 2.5
-    pitch_velocity_ki: 0.0
+    pitch_velocity_ki: 0.01
     pitch_velocity_kd: 0.0
+
+    top_yaw_angle_integral_min: -187.0
+    top_yaw_angle_integral_max: 187.0
+    top_yaw_velocity_integral_min: -2400.0
+    top_yaw_velocity_integral_max: 2400.0
+
+    bottom_yaw_angle_integral_min: -150.0
+    bottom_yaw_angle_integral_max: 150.0
+    bottom_yaw_velocity_integral_min: -2400.0
+    bottom_yaw_velocity_integral_max: 2400.0
+
+    pitch_angle_integral_min: -150.0
+    pitch_angle_integral_max: 150.0
+    pitch_velocity_integral_min: -2400.0
+    pitch_velocity_integral_max: 2400.0
+
+    top_yaw_velocity_ff_gain: 1.0
+    top_yaw_ff_cutoff_hz: 10.0
+    top_yaw_ff_max: 2.0
+    top_yaw_ff_jump_threshold: 0.01
 
 chassis_controller:
   ros__parameters:
@@ -251,10 +276,12 @@ steering_wheel_controller:
     chassis_translation_kp: 20.0
     chassis_translation_ki: 0.00
     chassis_translation_kd: 0.00
+    chassis_translation_integral_limit: 200.0
 
     chassis_angular_velocity_kp: 8.0
     chassis_angular_velocity_ki: 0.005
     chassis_angular_velocity_kd: 1.0
+    chassis_angular_velocity_integral_limit: 200.0
 
     steering_velocity_kp: 0.15
     steering_velocity_ki: 0.0

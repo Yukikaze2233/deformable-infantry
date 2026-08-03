@@ -30,6 +30,9 @@ public:
               get_component_name(),
               rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true))
         , following_velocity_controller_(10.0, 0.0, 0.0)
+        , wireless_charging_speed_limit_(get_parameter_or("wireless_charging_speed_limit", 0.2))
+        , wireless_charging_angular_velocity_limit_(
+              get_parameter_or("wireless_charging_angular_velocity_limit", 3.0))
         , joint_mode_mgr_(*this) {
 
         following_velocity_controller_.output_max = angular_velocity_max_;
@@ -174,7 +177,10 @@ private:
         if (translational_velocity.norm() > 1.0)
             translational_velocity.normalize();
 
-        translational_velocity *= translational_velocity_max_;
+        const double max_speed =
+            *mode_ == rmcs_msgs::ChassisMode::WIRELESS_CHARGING ? wireless_charging_speed_limit_
+                                                                 : translational_velocity_max_;
+        translational_velocity *= max_speed;
         return translational_velocity;
     }
 
@@ -221,6 +227,9 @@ private:
             chassis_angle_error = normalize_signed_angle(chassis_angle_error);
 
             angular_velocity = following_velocity_controller_.update(chassis_angle_error);
+            angular_velocity = std::clamp(
+                angular_velocity, -wireless_charging_angular_velocity_limit_,
+                wireless_charging_angular_velocity_limit_);
         } break;
 
         default: break;
@@ -301,6 +310,9 @@ private:
     std::array<OutputInterface<double>, kJointCount> joint_posture_target_angle_rad_;
 
     pid::PidCalculator following_velocity_controller_;
+
+    double wireless_charging_speed_limit_;
+    double wireless_charging_angular_velocity_limit_;
 
     DeformableChassisModeManager joint_mode_mgr_;
 };
